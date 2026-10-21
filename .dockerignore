@@ -1,0 +1,13 @@
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.pytest_cache
+**/node_modules
+frontend/dist
+backend/data
+docs/screenshots
+*.log
+.DS_Store
+.playwright-mcp
