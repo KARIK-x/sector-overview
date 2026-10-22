@@ -131,7 +131,7 @@ screenshot.
 | --- | --- | --- |
 | Research free hosting | `TESTED-PASS` | Render / Hugging Face / Oracle / Neon options documented |
 | No paid infrastructure used | `TESTED-PASS` | Local run only; no account, card or paid service |
-| Honest deployment status | `NOT-TESTED` | Not publicly deployed; Docker build/smoke is now `TESTED-PASS`, Postgres path remains untested |
+| Honest deployment status | `NOT-TESTED` | Not publicly deployed; Docker build/smoke and the Postgres path are `TESTED-PASS` |
 
 ---
 
@@ -172,6 +172,6 @@ the page.
 
 Every required page exists, the mandatory Rotation Lab contract is implemented and unit-tested, the
 data is real and the gaps are labelled, and the production build was exercised in two browsers with
-real downloads and screenshots. The honest exceptions are WebKit/Safari, PostgreSQL, public deployment, screen-reader testing, and
-per-mark hover automation — all marked as such rather than promoted to `TESTED-PASS`. Docker build and
-container smoke are now `TESTED-PASS`.
+real downloads and screenshots. The honest exceptions are WebKit/Safari, public deployment, screen-reader testing, and per-mark hover
+automation — all marked as such rather than promoted to `TESTED-PASS`. Docker build/container smoke and
+the Postgres path are now `TESTED-PASS`.

@@ -228,8 +228,8 @@ Four sub-indices cover materially less than the NEPSE calendar:
 
 ### 4.10 Documentation is intentionally explicit
 
-* Docs include unverified steps (Postgres, public deployment) marked as such. The Docker build and
-  container smoke are now verified.
+* Docs include unverified steps (public deployment) marked as such. The Docker build/container smoke
+  and the Postgres path are now verified.
 * Nothing is labelled `TESTED-PASS` without a recorded run.
 
 ---

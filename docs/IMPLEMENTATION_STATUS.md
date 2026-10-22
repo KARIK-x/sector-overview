@@ -40,7 +40,7 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | Theme / command palette / mobile drawer / 404 | `TESTED-PASS` | Firefox + Chrome; screenshots for dark, mobile and 404 |
 | CSV / PNG exports | `TESTED-PASS` | Real downloads inspected: non-empty files, expected headers/PNG dimensions |
 | Cross-browser | `TESTED-PASS` (Chrome 36, Firefox 76) · `BLOCKED` (WebKit) | Playwright WebKit crashes with a host `Bus error`; Safari remains unverified |
-| PostgreSQL path | `NOT-TESTED` | No PostgreSQL server in this environment; SQLite is the live store |
+| PostgreSQL path | `TESTED-PASS` | Ingested sectors/indices/securities/fundamentals into Postgres 16; `/api/health`, `/api/sectors`, `/api/dashboard`, `/api/heatmap`, `/api/rotation`, `/api/compare`, `/api/risk`, `/api/fundamentals` returned 200 |
 | Docker image | `TESTED-PASS` | Multi-stage build succeeded; container served `/api/health` and the SPA (`nsi:local`) |
 | Public deployment | `NOT-TESTED` | Free-tier options researched; no account/credentials used |
 | Screen-reader / WCAG audit | `NOT-TESTED` | Keyboard palette and focus styles implemented; no VoiceOver/NVDA run |
