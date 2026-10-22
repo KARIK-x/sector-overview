@@ -10,6 +10,7 @@ numpy>=1.26
 scipy>=1.12
 httpx>=0.27
 python-dotenv>=1.0
+a2wsgi>=1.10
 
 # Optional PostgreSQL driver (required when DATABASE_URL uses postgresql+psycopg).
 psycopg[binary]>=3.2
