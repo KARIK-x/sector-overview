@@ -497,7 +497,6 @@ export default function LiquidityLab() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
                   <tr className="bg-raised/60 font-medium">
                     <td className="num text-faint">{rows.length + 1}</td>
                     <td>Total (observed sectors)</td>
@@ -514,6 +513,7 @@ export default function LiquidityLab() {
                       </div>
                     </td>
                   </tr>
+                </tbody>
               </table>
             </div>
           </Card>

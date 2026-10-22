@@ -200,16 +200,16 @@ re-checked with 2–3× nearest-neighbour crops before any layout conclusion was
 
 | File | Viewport | What it shows |
 | --- | --- | --- |
-| `01-dashboard.png` | 1440×2711 | Full dashboard: lead, rotation, heatmap, breadth, liquidity, risk, trust |
-| `02-rotation-lab.png` | 1440×2988 | Map, table, selected sector, timeline, crossings, axis contract |
+| `01-dashboard.png` | 1440×3525 | Full dashboard: lead, rotation, heatmap, breadth, liquidity, risk, trust |
+| `02-rotation-lab.png` | 1440×3439 | Map, table, selected sector, timeline, crossings, axis contract |
 | `03-sector-comparison.png` | 1440×1905 | Rebased multi-series chart and statistics |
-| `04-breadth-lab.png` | 1440×2248 | 120-session breadth, divergence, sector width, deep dive |
-| `05-liquidity-lab.png` | 1440×2419 | Stacked turnover, share donut, scatter, concentration |
-| `06-risk-lab.png` | 1440×3153 | Risk/return, volatility, 14×14 correlation, table, drawdown |
-| `07-fundamentals-lab.png` | 1440×2440 | P/E dot plot, ROE bubble, aggregates, member table |
-| `08-sector-explorer.png` | 1440×2901 | Price structure, participation, liquidity, risk, filings |
+| `04-breadth-lab.png` | 1440×2285 | 120-session breadth, divergence, sector width, deep dive |
+| `05-liquidity-lab.png` | 1440×2990 | Stacked turnover, share donut, scatter, concentration |
+| `06-risk-lab.png` | 1440×3241 | Risk/return, volatility, 14×14 correlation, table, drawdown |
+| `07-fundamentals-lab.png` | 1440×2477 | P/E dot plot, ROE bubble, aggregates, member table |
+| `08-sector-explorer.png` | 1440×3254 | Price structure, participation, liquidity, risk, filings |
 | `09-quantitative-research.png` | 1440×2066 | Factor model, ranking, attribution, transitions, backtest |
-| `10-data-quality.png` | 1440×2718 | Coverage, inventory, validation, runs, source register |
+| `10-data-quality.png` | 1440×2834 | Coverage, inventory, validation, runs, source register |
 | `11-events-research.png` | 1440×1211 | Planned coverage and `UNAVAILABLE` source status |
 | `12-methodology.png` | 1440×3999 | Full method reference |
 | `13-dashboard-dark.png` | 1440×900 | Dark theme, top of dashboard |
@@ -354,3 +354,31 @@ exist. Member data is used only for breadth, liquidity, capitalisation and conce
 - Screen-reader/WCAG audit remains `NOT-TESTED`.
 - Touch pinch zoom remains `NOT-TESTED`.
 - Tooltips on charts other than the rotation map are implemented but not asserted mark-by-mark.
+
+---
+
+## 10. Final independent verification (2026-10-22)
+
+Commands and results:
+
+| Command | Result |
+| --- | --- |
+| `cd backend && .venv/bin/python -m pytest -p no:warnings` | `65 passed in 1.35s` |
+| `cd backend && .venv/bin/ruff check app tests` | `All checks passed!` |
+| `cd frontend && npx tsc -b` | clean |
+| `cd frontend && npm run build` | succeeded, `✓ built in 3.12s` |
+| `node scripts/verification/chrome-smoke.cjs` | `36 / 36` pass |
+| `node scripts/verification/firefox-primary.cjs` | `55 / 55` pass |
+| `node scripts/verification/firefox-supplemental.cjs` | `15 / 15` pass |
+| `node scripts/verification/firefox-extras.cjs` | `6 / 6` pass |
+
+Independent checks:
+
+- 13 sector sub-indices verified against `index_observations`.
+- 65 rotation sector/lookback combinations independently recalculated: 0 mismatches.
+- Total/benchmark rows render on Dashboard, Rotation, Risk, Liquidity, Breadth, Fundamentals, and Heatmap.
+- Period selectors render on Dashboard, Risk Lab, and Liquidity Lab.
+- All 13 routes plus 404 rendered with zero console/page errors.
+- Fresh screenshots captured in `artifacts/screenshots/` (16 images).
+
+Safari/WebKit remains `BLOCKED`; public deployment and load testing remain `NOT-TESTED`.
