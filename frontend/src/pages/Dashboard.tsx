@@ -35,9 +35,8 @@ function SessionBrief({ data }: { data: DashboardPayload }) {
   const adRatio = totalDec ? totalAdv / totalDec : null
 
   return (
-    <Card className="relative overflow-hidden">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-accent/[0.06] blur-2xl" />
-      <div className="relative grid gap-6 lg:grid-cols-[1.15fr_1fr_1fr]">
+    <Card>
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_1fr_1fr]">
         <div>
           <div className="flex items-center gap-2">
             <span className="eyebrow">NEPSE · session close</span>
@@ -100,7 +99,7 @@ function SessionBrief({ data }: { data: DashboardPayload }) {
                 <span className="w-[108px] shrink-0 truncate text-muted">{r.sector_name}</span>
                 <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-line">
                   <div
-                    className="h-full bg-[#0e7c66] dark:bg-[#4fd1b0]"
+                    className="h-full bg-[#1f6f5f] dark:bg-[#6fbfa8]"
                     style={{ width: `${(r.advance_pct ?? 0) * 100}%` }}
                   />
                   <div
@@ -167,7 +166,7 @@ function LeadershipBoard({ rows, transitions }: { rows: RotationRow[]; transitio
       />
       <div className="grid flex-1 gap-5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
         <div>
-          <div className="eyebrow mb-1 text-[#0e7c66] dark:text-[#4fd1b0]">Outperformers</div>
+          <div className="eyebrow mb-1 text-[#1f6f5f] dark:text-[#6fbfa8]">Outperformers</div>
           {top.map((r) => <Bar key={r.code} row={r} />)}
         </div>
         <div>
@@ -217,7 +216,7 @@ function BreadthCard({ data }: { data: DashboardPayload }) {
           <div key={r.sector_name} className="flex items-center gap-2.5">
             <span className="w-[105px] shrink-0 truncate text-[11px] text-muted">{r.sector_name}</span>
             <div className="relative flex h-3.5 flex-1 overflow-hidden rounded-sm bg-line/50">
-              <div className="h-full bg-[#0e7c66] dark:bg-[#4fd1b0]" style={{ width: `${(r.advance_pct ?? 0) * 100}%` }} />
+              <div className="h-full bg-[#1f6f5f] dark:bg-[#6fbfa8]" style={{ width: `${(r.advance_pct ?? 0) * 100}%` }} />
               <div
                 className="h-full bg-[#b23b3b] dark:bg-[#f08a86]"
                 style={{ width: `${(r.decline_pct ?? 0) * 100}%`, marginLeft: 'auto' }}
@@ -228,7 +227,7 @@ function BreadthCard({ data }: { data: DashboardPayload }) {
         ))}
       </div>
       <div className="mt-3 flex items-center justify-between border-t pt-2 text-[10px] text-muted">
-        <span><span className="inline-block h-2 w-2 rounded-sm bg-[#0e7c66] dark:bg-[#4fd1b0]" /> advancing</span>
+        <span><span className="inline-block h-2 w-2 rounded-sm bg-[#1f6f5f] dark:bg-[#6fbfa8]" /> advancing</span>
         <span><span className="inline-block h-2 w-2 rounded-sm bg-[#b23b3b] dark:bg-[#f08a86]" /> declining</span>
         <span className="num">n = {rows.reduce((s, r) => s + r.traded, 0)}</span>
       </div>
@@ -256,7 +255,7 @@ function LiquidityCard({ data }: { data: DashboardPayload }) {
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-sm" style={{ background: 'color-mix(in srgb, var(--line) 55%, transparent)' }}>
               <div
-                className="h-full rounded-sm bg-[#0e7c66] dark:bg-[#4fd1b0]"
+                className="h-full rounded-sm bg-[#1f6f5f] dark:bg-[#6fbfa8]"
                 style={{ width: `${Math.max(2, ((r.share ?? 0) / max) * 100)}%` }}
               />
             </div>
@@ -387,7 +386,7 @@ function ContributionCard({ data }: { data: DashboardPayload }) {
                   style={{
                     width: `${(Math.abs(v) / max) * 50}%`,
                     left: v >= 0 ? '50%' : `${50 - (Math.abs(v) / max) * 50}%`,
-                    backgroundColor: v >= 0 ? (isDark ? '#4fd1b0' : '#0e7c66') : (isDark ? '#f08a86' : '#b23b3b'),
+                    backgroundColor: v >= 0 ? (isDark ? '#6fbfa8' : '#1f6f5f') : (isDark ? '#f08a86' : '#b23b3b'),
                     opacity: 0.85,
                   }}
                 />

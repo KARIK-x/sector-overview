@@ -25,7 +25,7 @@ export function palette(dark: boolean): Palette {
     line: cssVar('--line', dark ? '#24312c' : '#e0ddd4'),
     surface: cssVar('--surface', dark ? '#111917' : '#fffdf8'),
     paper: cssVar('--paper', dark ? '#0b1110' : '#f5f3ee'),
-    accent: cssVar('--accent', dark ? '#4fd1b0' : '#0e7c66'),
+    accent: cssVar('--accent', dark ? '#9fb3cf' : '#243b5a'),
     grid: cssVar('--grid', dark ? 'rgba(233,240,236,0.06)' : 'rgba(17,27,24,0.06)'),
   }
 }
@@ -33,7 +33,7 @@ export function palette(dark: boolean): Palette {
 export function quadrantColor(q: string | null | undefined, dark: boolean): string {
   switch (q) {
     case 'WINNING':
-      return dark ? '#4fd1b0' : '#0e7c66'
+      return dark ? '#6fbfa8' : '#1f6f5f'
     case 'ADVANCING':
       return dark ? '#7ab3e8' : '#2c5d8f'
     case 'LOSING':
@@ -111,6 +111,6 @@ export function tooltipFormatterNumber(value: number | null | undefined, digits 
 /** Categorical hues chosen to stay separable in both themes. */
 export function seriesColors(dark: boolean): string[] {
   return dark
-    ? ['#4fd1b0', '#7ab3e8', '#e8b06a', '#f08a86', '#b69ce8', '#9fd08a', '#e8c978', '#6fc7d8', '#d79ac0', '#a8b6ae', '#8ec9a8', '#c8a2e0', '#d8a878']
-    : ['#0e7c66', '#2c5d8f', '#b06a14', '#b23b3b', '#6b4f9e', '#4a7c3f', '#8a6a12', '#1f7a8c', '#8e4a72', '#5c6a64', '#3f7a5c', '#7a4f9e', '#8a5a2b']
+    ? ['#6fbfa8', '#7ab3e8', '#e8b06a', '#f08a86', '#b69ce8', '#9fd08a', '#e8c978', '#6fc7d8', '#d79ac0', '#a8b6ae', '#8ec9a8', '#c8a2e0', '#d8a878']
+    : ['#1f6f5f', '#2c5d8f', '#b06a14', '#b23b3b', '#6b4f9e', '#4a7c3f', '#8a6a12', '#1f7a8c', '#8e4a72', '#5c6a64', '#3f7a5c', '#7a4f9e', '#8a5a2b']
 }

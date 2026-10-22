@@ -42,10 +42,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                       onClick={onNavigate}
                       aria-current={active ? 'page' : undefined}
                       className={cn(
-                        'group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors',
+                        'group flex items-center gap-2.5 rounded-lg border-l-2 px-2.5 py-2 text-[13px] transition-colors',
                         active
-                          ? 'bg-raised font-medium text-ink'
-                          : 'text-muted hover:bg-raised hover:text-ink',
+                          ? 'border-accent bg-raised/70 font-semibold text-ink'
+                          : 'border-transparent text-muted hover:bg-raised hover:text-ink',
                       )}
                     >
                       <Icon
@@ -54,7 +54,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                         className={cn(active ? 'text-accent' : 'text-faint group-hover:text-muted')}
                       />
                       <span className="truncate">{item.label}</span>
-                      {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />}
                     </Link>
                   </li>
                 )

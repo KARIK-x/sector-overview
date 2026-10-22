@@ -461,7 +461,7 @@ export default function RiskLab() {
                     style={{
                       background: isDark
                         ? 'linear-gradient(90deg,#8e3a3a,#3a2a28,#111917,#173b33,#2f9c82)'
-                        : 'linear-gradient(90deg,#b23b3b,#e8c4bd,#fffdf8,#b7ddd3,#0e7c66)',
+                        : 'linear-gradient(90deg,#9f3a3a,#e8c4bd,#fffdf8,#b7ddd3,#1f6f5f)',
                     }}
                   />
                   <span className="num">+1</span>

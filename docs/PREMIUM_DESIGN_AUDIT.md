@@ -28,3 +28,14 @@ Baseline: commit `705e2be`, 12 content pages, 27 chart surfaces, 16 Chrome scree
 ## Constraints
 
 No individual-company pages, no OHLC/candle database, no fabricated data, no paid services, and no changes to verified rotation definitions.
+
+
+## Critical redesign applied
+
+- Replaced the green-dominant accent with a deep slate-blue brand accent.
+- Restricted green/red to financial semantics.
+- Refined light surfaces to warm off-white and dark surfaces to charcoal.
+- Reduced card radius and softened shadows.
+- Reworked navigation active state to a restrained left-border treatment.
+- Removed the dashboard decorative blur.
+- Preserved all analytics, calculations, routes, and data provenance.

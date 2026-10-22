@@ -19,7 +19,7 @@ const FACTORS = [
   { key: 'trend', label: '60D trend', hint: 'Cumulative 60-session return' },
 ] as const
 
-const FACTOR_COLORS = ['#0e7c66', '#2c5d8f', '#b06a14', '#6b5b95', '#b23b3b', '#4a7a6a']
+const FACTOR_COLORS = ['#1f6f5f', '#2c5d8f', '#b06a14', '#6b5b95', '#b23b3b', '#4a7a6a']
 
 const DEFAULT_WEIGHTS: Record<string, number> = {
   momentum_20: 25,
@@ -129,8 +129,8 @@ export default function ResearchLab() {
         // red-to-green diverging scale implied that persistence was "bad".
         inRange: {
           color: isDark
-            ? ['#15211d', '#1f5147', '#2f8a74', '#4fd1b0']
-            : ['#f3f5f2', '#bcd8cd', '#5aa792', '#0e7c66'],
+            ? ['#15211d', '#1f5147', '#2f8a74', '#6fbfa8']
+            : ['#f3f5f2', '#bcd8cd', '#5aa792', '#1f6f5f'],
         },
       },
       series: [

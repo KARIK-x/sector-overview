@@ -87,14 +87,14 @@ export function Metric({
 }
 
 const badgeStyles: Record<string, string> = {
-  VERIFIED: 'border-[#0e7c66]/30 bg-[#0e7c66]/10 text-[#0e7c66] dark:text-[#4fd1b0] dark:border-[#4fd1b0]/30',
+  VERIFIED: 'border-[#1f6f5f]/30 bg-[#1f6f5f]/10 text-[#1f6f5f] dark:text-[#6fbfa8] dark:border-[#6fbfa8]/30',
   PROVISIONAL: 'border-[#b06a14]/30 bg-[#b06a14]/10 text-[#96601a] dark:text-[#e8b06a]',
   INCOMPLETE: 'border-[#b06a14]/30 bg-[#b06a14]/10 text-[#96601a] dark:text-[#e8b06a]',
   PARTIAL_HISTORY: 'border-[#b06a14]/30 bg-[#b06a14]/10 text-[#96601a] dark:text-[#e8b06a]',
   STALE: 'border-[#b06a14]/30 bg-[#b06a14]/10 text-[#96601a] dark:text-[#e8b06a]',
   UNAVAILABLE: 'border-line bg-raised text-muted',
   FAILED_VALIDATION: 'border-[#b23b3b]/30 bg-[#b23b3b]/10 text-[#b23b3b] dark:text-[#f08a86]',
-  SUCCESS: 'border-[#0e7c66]/30 bg-[#0e7c66]/10 text-[#0e7c66] dark:text-[#4fd1b0]',
+  SUCCESS: 'border-[#1f6f5f]/30 bg-[#1f6f5f]/10 text-[#1f6f5f] dark:text-[#6fbfa8]',
   RUNNING: 'border-[#2c5d8f]/30 bg-[#2c5d8f]/10 text-[#2c5d8f] dark:text-[#7ab3e8]',
   FAILED: 'border-[#b23b3b]/30 bg-[#b23b3b]/10 text-[#b23b3b] dark:text-[#f08a86]',
 }
@@ -110,7 +110,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
 export function QuadrantBadge({ quadrant }: { quadrant: string | null }) {
   if (!quadrant) return <span className="text-faint">—</span>
   const map: Record<string, string> = {
-    WINNING: 'border-[#0e7c66]/30 bg-[#0e7c66]/10 text-[#0e7c66] dark:text-[#4fd1b0]',
+    WINNING: 'border-[#1f6f5f]/30 bg-[#1f6f5f]/10 text-[#1f6f5f] dark:text-[#6fbfa8]',
     ADVANCING: 'border-[#2c5d8f]/30 bg-[#2c5d8f]/10 text-[#2c5d8f] dark:text-[#7ab3e8]',
     LOSING: 'border-[#b06a14]/30 bg-[#b06a14]/10 text-[#96601a] dark:text-[#e8b06a]',
     LAGGING: 'border-[#b23b3b]/30 bg-[#b23b3b]/10 text-[#b23b3b] dark:text-[#f08a86]',

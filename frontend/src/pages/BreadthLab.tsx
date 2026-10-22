@@ -200,8 +200,8 @@ function ParticipationVsIndex({
           type: 'line',
           data: meanShare,
           showSymbol: false,
-          lineStyle: { width: 1.8, color: isDark ? '#4fd1b0' : '#0e7c66' },
-          itemStyle: { color: isDark ? '#4fd1b0' : '#0e7c66' },
+          lineStyle: { width: 1.8, color: isDark ? '#6fbfa8' : '#1f6f5f' },
+          itemStyle: { color: isDark ? '#6fbfa8' : '#1f6f5f' },
           areaStyle: { color: isDark ? 'rgba(79,209,176,0.10)' : 'rgba(14,124,102,0.08)' },
           markLine: {
             silent: true,
@@ -216,8 +216,8 @@ function ParticipationVsIndex({
           type: 'line',
           data: rows.map((r) => r.share),
           showSymbol: false,
-          lineStyle: { width: 0.9, color: isDark ? '#4fd1b0' : '#0e7c66', opacity: 0.28 },
-          itemStyle: { color: isDark ? '#4fd1b0' : '#0e7c66' },
+          lineStyle: { width: 0.9, color: isDark ? '#6fbfa8' : '#1f6f5f', opacity: 0.28 },
+          itemStyle: { color: isDark ? '#6fbfa8' : '#1f6f5f' },
         },
         {
           name: 'NEPSE (indexed)',
@@ -479,7 +479,7 @@ export default function BreadthLab() {
                             className="flex h-2 min-w-0 flex-1 overflow-hidden rounded-sm bg-line/60"
                             title={`${((r.advance_pct ?? 0) * 100).toFixed(1)}% advancing, ${((r.decline_pct ?? 0) * 100).toFixed(1)}% declining`}
                           >
-                            <div className="h-full bg-[#0e7c66] dark:bg-[#4fd1b0]" style={{ width: `${(r.advance_pct ?? 0) * 100}%` }} />
+                            <div className="h-full bg-[#1f6f5f] dark:bg-[#6fbfa8]" style={{ width: `${(r.advance_pct ?? 0) * 100}%` }} />
                             <div className="h-full bg-[#b23b3b] dark:bg-[#f08a86]" style={{ width: `${(r.decline_pct ?? 0) * 100}%` }} />
                           </div>
                           <span className="num w-9 shrink-0 text-right text-[10px] text-muted">

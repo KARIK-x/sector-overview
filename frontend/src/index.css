@@ -3,30 +3,30 @@
 @tailwind utilities;
 
 :root {
-  --paper: #f5f3ee;
-  --surface: #fffdf8;
-  --raised: #faf8f2;
-  --ink: #111b18;
-  --muted: #5c6a64;
-  --faint: #8b9791;
-  --line: #e0ddd4;
-  --accent: #0e7c66;
-  --accent-soft: #dcefe9;
-  --grid: rgba(17, 27, 24, 0.06);
+  --paper: #f7f5f0;
+  --surface: #ffffff;
+  --raised: #f1eee7;
+  --ink: #171a1f;
+  --muted: #5b6370;
+  --faint: #8a9099;
+  --line: #ddd7cc;
+  --accent: #243b5a;
+  --accent-soft: #e8ecf3;
+  --grid: rgba(23, 26, 31, 0.06);
   color-scheme: light;
 }
 
 .dark {
-  --paper: #0b1110;
-  --surface: #111917;
-  --raised: #16201d;
-  --ink: #e9f0ec;
-  --muted: #93a29b;
-  --faint: #6d7c76;
-  --line: #24312c;
-  --accent: #4fd1b0;
-  --accent-soft: #12312a;
-  --grid: rgba(233, 240, 236, 0.06);
+  --paper: #0e1014;
+  --surface: #15181d;
+  --raised: #1c2026;
+  --ink: #eceae4;
+  --muted: #9aa0a8;
+  --faint: #6b7178;
+  --line: #2a2f36;
+  --accent: #9fb3cf;
+  --accent-soft: #1a2230;
+  --grid: rgba(236, 234, 228, 0.06);
   color-scheme: dark;
 }
 
@@ -58,8 +58,8 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background-image:
-    radial-gradient(ellipse 80% 50% at 12% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, color-mix(in srgb, #c2761a 6%, transparent), transparent);
+    radial-gradient(ellipse 70% 45% at 8% -8%, color-mix(in srgb, var(--accent) 4%, transparent), transparent),
+    radial-gradient(ellipse 50% 35% at 100% 0%, color-mix(in srgb, #9a6a1f 3%, transparent), transparent);
 }
 
 ::selection {
@@ -96,7 +96,7 @@ body::before {
     /* min-w-0 lets a card shrink inside CSS grid/flex tracks so wide children
        (heatmaps, tables) scroll inside their own container instead of
        widening the page on small screens. */
-    @apply min-w-0 rounded-2xl border bg-surface shadow-card;
+    @apply min-w-0 rounded-xl border bg-surface shadow-card;
     border-color: var(--line);
   }
 
@@ -207,22 +207,22 @@ body::before {
 }
 
 .pos {
-  color: #0e7c66;
+  color: #1f6f5f;
 }
 .dark .pos {
-  color: #4fd1b0;
+  color: #6fbfa8;
 }
 .neg {
-  color: #b23b3b;
+  color: #9f3a3a;
 }
 .dark .neg {
-  color: #f08a86;
+  color: #d48a8a;
 }
 .warn {
-  color: #b06a14;
+  color: #9a6a1f;
 }
 .dark .warn {
-  color: #e8b06a;
+  color: #d4a26a;
 }
 
 @media (prefers-reduced-motion: reduce) {

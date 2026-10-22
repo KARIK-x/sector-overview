@@ -14,7 +14,7 @@ import { downloadCsv } from '../lib/export'
 import { Segmented } from '../components/ui'
 
 const SECTOR_COLORS = [
-  '#0e7c66',
+  '#1f6f5f',
   '#2c5d8f',
   '#b06a14',
   '#6b5b95',

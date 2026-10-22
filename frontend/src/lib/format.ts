@@ -62,7 +62,7 @@ export function toneClass(value: number | null | undefined): string {
 export function quadrantTone(q: string | null | undefined): string {
   switch (q) {
     case 'WINNING':
-      return 'text-[#0e7c66] dark:text-[#4fd1b0]'
+      return 'text-[#1f6f5f] dark:text-[#6fbfa8]'
     case 'ADVANCING':
       return 'text-[#2c5d8f] dark:text-[#7ab3e8]'
     case 'LOSING':
@@ -81,8 +81,8 @@ export const QUADRANT_META: Record<
   WINNING: {
     label: 'Winning',
     short: 'WIN',
-    color: '#0e7c66',
-    dark: '#4fd1b0',
+    color: '#1f6f5f',
+    dark: '#6fbfa8',
     description: 'Positive absolute return and outperforming NEPSE.',
   },
   ADVANCING: {
