@@ -13,8 +13,6 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import router
 from .api.serialize import clean_json
 from .config import BASE_DIR, settings
-from .db import SessionLocal
-from .services import cache
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -29,22 +27,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from .db import init_db
 
     init_db()
-    try:
-        with SessionLocal() as session:
-            def dashboard_payload():
-                from .services import analytics
-
-                return analytics.dashboard_payload(session)
-
-            def liquidity_summary():
-                from .services import analytics
-
-                return analytics.liquidity_summary(session)
-
-            cache.memo("dashboard", cache.DEFAULT_TTL, dashboard_payload)
-            cache.memo("liquidity", cache.DEFAULT_TTL, liquidity_summary)
-    except Exception:  # noqa: BLE001
-        logging.exception("Startup cache warmup failed")
     yield
 
 
