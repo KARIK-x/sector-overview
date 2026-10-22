@@ -1,8 +1,8 @@
 import type { EChartsOption } from 'echarts'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Download, Eye, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Download, Eye, RotateCcw, SlidersHorizontal, Star } from 'lucide-react'
 import { api } from '../lib/api'
 import type { RotationRow, TrailPoint } from '../lib/api'
 import { BUBBLE_METRICS, RotationQuadrant } from '../components/RotationQuadrant'
@@ -156,20 +156,132 @@ function SelectedSector({ row, trail }: { row: RotationRow; trail?: TrailPoint[]
   )
 }
 
+
+function classifyQuadrant(abs: number | null, rel: number | null, absThr: number, relThr: number): string | null {
+  if (abs === null || rel === null) return null
+  if (abs > absThr && rel > relThr) return 'WINNING'
+  if (abs <= absThr && rel > relThr) return 'ADVANCING'
+  if (abs > absThr && rel <= relThr) return 'LOSING'
+  return 'LAGGING'
+}
+
+function HistoricalPosition({
+  code,
+  history,
+  absThreshold,
+  relThreshold,
+}: {
+  code: string
+  history: { dates: string[]; series: Array<{ code: string; absolute: Array<number | null>; relative: Array<number | null> }> }
+  absThreshold: number
+  relThreshold: number
+}) {
+  const series = history.series.find((s) => s.code === code)
+  const maxIndex = Math.max(0, history.dates.length - 1)
+  const [index, setIndex] = useState(maxIndex)
+  const [playing, setPlaying] = useState(false)
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  useEffect(() => {
+    setIndex(maxIndex)
+  }, [maxIndex, code])
+
+  useEffect(() => {
+    if (!playing || reducedMotion) return
+    const timer = window.setInterval(() => {
+      setIndex((v) => (v >= maxIndex ? maxIndex : v + 1))
+    }, 700)
+    return () => window.clearInterval(timer)
+  }, [playing, maxIndex, reducedMotion])
+
+  useEffect(() => {
+    if (index >= maxIndex) setPlaying(false)
+  }, [index, maxIndex])
+
+  const abs = series?.absolute[index] ?? null
+  const rel = series?.relative[index] ?? null
+  const quadrant = classifyQuadrant(abs, rel, absThreshold, relThreshold)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn" onClick={() => setPlaying((v) => !v)} disabled={reducedMotion}>
+          {playing ? 'Pause' : 'Play'}
+        </button>
+        <button className="btn" onClick={() => setIndex((v) => Math.max(0, v - 1))}>Step back</button>
+        <button className="btn" onClick={() => setIndex((v) => Math.min(maxIndex, v + 1))}>Step forward</button>
+        <button className="btn" onClick={() => setIndex(maxIndex)}>Latest</button>
+        <span className="num text-[10px] text-muted">{history.dates[index] ?? '—'}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={maxIndex}
+        step={1}
+        value={index}
+        onChange={(e) => setIndex(Number(e.target.value))}
+        className="w-full accent-[var(--accent)]"
+        aria-label="Historical rotation snapshot"
+      />
+      <div className="grid grid-cols-3 gap-3">
+        <Metric label="Absolute" value={abs == null ? '—' : signedPct(abs)} tone={abs && abs > 0 ? 'pos' : 'neg'} />
+        <Metric label="Relative" value={rel == null ? '—' : signedPct(rel)} tone={rel && rel > 0 ? 'pos' : 'neg'} />
+        <div>
+          <div className="eyebrow mb-1.5">Quadrant</div>
+          <QuadrantBadge quadrant={quadrant} />
+        </div>
+      </div>
+      <p className="text-[10px] leading-relaxed text-muted">
+        Historical values are stored observations for the selected lookback. Playback advances through
+        recorded sessions only; it does not interpolate or stream live data.
+        {reducedMotion ? ' Automatic playback is disabled because reduced motion is requested.' : ''}
+      </p>
+    </div>
+  )
+}
+
 export default function RotationLab() {
-  const [window, setWindow] = useState(20)
-  const [trailSessions, setTrailSessions] = useState(10)
+  const [window, setWindow] = useState(() => {
+    const raw = localStorage.getItem('nsi-pref-lookback')
+    const v = raw ? Number(raw) : 20
+    return [5, 10, 20, 60, 120].includes(v) ? v : 20
+  })
+  const [trailSessions, setTrailSessions] = useState(() => {
+    const raw = localStorage.getItem('nsi-pref-trail')
+    const v = raw ? Number(raw) : 10
+    return [0, 10, 25, 50].includes(v) ? v : 10
+  })
   const [absThr, setAbsThr] = useState(0)
   const [relThr, setRelThr] = useState(0)
   const [selected, setSelected] = useState<string | null>('BANKING')
   const [sortKey, setSortKey] = useState<SortKey>('relative_strength')
   const [asc, setAsc] = useState(false)
   const [showControls, setShowControls] = useState(false)
-  const [bubbleMetric, setBubbleMetric] = useState<BubbleMetric>('none')
+  const [bubbleMetric, setBubbleMetric] = useState<BubbleMetric>(() => {
+    const raw = localStorage.getItem('nsi-pref-bubble')
+    return (['none', 'market_cap', 'turnover', 'volatility', 'advance_pct'] as BubbleMetric[]).includes(raw as BubbleMetric)
+      ? (raw as BubbleMetric)
+      : 'none'
+  })
   const [historyMode, setHistoryMode] = useState<TimelineMode>('rank')
   const [showSectorFilter, setShowSectorFilter] = useState(false)
   const [hiddenCodes, setHiddenCodes] = useState<string[]>([])
+  const [watchlistOnly, setWatchlistOnly] = useState(false)
+  const [watchlist, setWatchlist] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('nsi-watchlist')
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  })
   const [zoomKey, setZoomKey] = useState(0)
+
+  useEffect(() => localStorage.setItem('nsi-pref-lookback', String(window)), [window])
+  useEffect(() => localStorage.setItem('nsi-pref-trail', String(trailSessions)), [trailSessions])
+  useEffect(() => localStorage.setItem('nsi-pref-bubble', bubbleMetric), [bubbleMetric])
+  useEffect(() => localStorage.setItem('nsi-watchlist', JSON.stringify(watchlist)), [watchlist])
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['rotation', window, absThr, relThr],
@@ -186,14 +298,14 @@ export default function RotationLab() {
   })
 
   const rows = data?.rows ?? []
-  const selectedRow = rows.find((r) => r.code === selected) ?? rows[0]
+  const selectedRow = selected ? rows.find((r) => r.code === selected) : undefined
   const visibleRows = useMemo(
-    () => rows.filter((r) => !hiddenCodes.includes(r.code)),
-    [rows, hiddenCodes],
+    () => rows.filter((r) => !hiddenCodes.includes(r.code) && (!watchlistOnly || watchlist.includes(r.code))),
+    [rows, hiddenCodes, watchlist, watchlistOnly],
   )
   const historySeries = useMemo(
-    () => (history?.series ?? []).filter((s) => !hiddenCodes.includes(s.code)),
-    [history, hiddenCodes],
+    () => (history?.series ?? []).filter((s) => !hiddenCodes.includes(s.code) && (!watchlistOnly || watchlist.includes(s.code))),
+    [history, hiddenCodes, watchlist, watchlistOnly],
   )
 
   const groups = useMemo(() => {
@@ -236,6 +348,9 @@ export default function RotationLab() {
             <button className="btn" onClick={() => setShowControls((v) => !v)}>
               <SlidersHorizontal size={13} /> Thresholds
             </button>
+            <button className="btn" onClick={() => setSelected(null)} title="Clear the selected sector">
+              <RotateCcw size={13} /> Clear selection
+            </button>
             <button
               className="btn"
               onClick={() => {
@@ -246,6 +361,7 @@ export default function RotationLab() {
                 setBubbleMetric('none')
                 setHistoryMode('rank')
                 setHiddenCodes([])
+                setWatchlistOnly(false)
                 setZoomKey((v) => v + 1)
               }}
             >
@@ -268,6 +384,13 @@ export default function RotationLab() {
           />
           <button className="btn" onClick={() => setShowSectorFilter((v) => !v)} aria-expanded={showSectorFilter}>
             <Eye size={13} /> {visibleRows.length}/{rows.length} sectors
+          </button>
+          <button
+            className={cn('btn', watchlistOnly && 'btn-active')}
+            onClick={() => setWatchlistOnly((v) => !v)}
+            aria-pressed={watchlistOnly}
+          >
+            <Star size={13} /> Watchlist{watchlist.length ? ` (${watchlist.length})` : ''}
           </button>
           <div className="ml-auto flex items-center gap-3 text-[10px] text-muted">
             <span className="num">{visibleRows.length} of {rows.length} shown</span>
@@ -377,6 +500,7 @@ export default function RotationLab() {
                 trails={trailSessions > 0 ? trailData?.trails : undefined}
                 height={520}
                 selected={selected}
+                watched={watchlist}
                 onSelect={setSelected}
                 bubbleMetric={bubbleMetric}
                 exportName={`nepse-rotation-${window}s`}
@@ -390,9 +514,25 @@ export default function RotationLab() {
             <div className="grid gap-4">
               <Card className="min-h-[260px]">
                 {selectedRow ? (
-                  <SelectedSector row={selectedRow} trail={trailData?.trails?.[selectedRow.code]} />
+                  <>
+                    <div className="mb-3 flex justify-end">
+                      <button
+                        className="btn text-[10px]"
+                        onClick={() =>
+                          setWatchlist((prev) =>
+                            prev.includes(selectedRow.code)
+                              ? prev.filter((code) => code !== selectedRow.code)
+                              : [...prev, selectedRow.code],
+                          )
+                        }
+                      >
+                        <Star size={12} /> {watchlist.includes(selectedRow.code) ? 'Pinned' : 'Pin sector'}
+                      </button>
+                    </div>
+                    <SelectedSector row={selectedRow} trail={trailData?.trails?.[selectedRow.code]} />
+                  </>
                 ) : (
-                  <InfoNote>Select a sector on the map.</InfoNote>
+                  <InfoNote>Select a sector on the map or table to inspect its trajectory.</InfoNote>
                 )}
               </Card>
               <Card>
@@ -481,10 +621,24 @@ export default function RotationLab() {
                       onClick={() => setSelected(r.code)}
                     >
                       <td>
-                        <Link to={`/sectors?code=${r.code}`} className="flex items-center gap-2 hover:text-accent">
-                          <span className="truncate">{r.name}</span>
-                          <ArrowUpRight size={11} className="text-faint" />
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <button
+                            aria-label={watchlist.includes(r.code) ? `Unpin ${r.name}` : `Pin ${r.name}`}
+                            className={cn('text-faint transition-colors hover:text-accent', watchlist.includes(r.code) && 'text-accent')}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setWatchlist((prev) =>
+                                prev.includes(r.code) ? prev.filter((code) => code !== r.code) : [...prev, r.code],
+                              )
+                            }}
+                          >
+                            <Star size={12} fill={watchlist.includes(r.code) ? 'currentColor' : 'none'} />
+                          </button>
+                          <Link to={`/sectors?code=${r.code}`} className="flex items-center gap-2 hover:text-accent">
+                            <span className="truncate">{r.name}</span>
+                            <ArrowUpRight size={11} className="text-faint" />
+                          </Link>
+                        </div>
                       </td>
                       <td className={cn('num text-right', toneClass(r.absolute_strength))}>{signedPct(r.absolute_strength)}</td>
                       <td className={cn('num text-right', toneClass(r.relative_strength))}>{signedPct(r.relative_strength)}</td>
@@ -501,6 +655,24 @@ export default function RotationLab() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader
+              eyebrow="Historical position"
+              title="Inspect a past rotation snapshot"
+              subtitle="Scrub through the 120-session history for the selected sector. Playback uses stored observations only."
+            />
+            {selectedRow && history?.available && history.dates.length > 0 ? (
+              <HistoricalPosition
+                code={selectedRow.code}
+                history={history}
+                absThreshold={absThr}
+                relThreshold={relThr}
+              />
+            ) : (
+              <InfoNote>Select a sector with history to inspect past positions.</InfoNote>
+            )}
           </Card>
 
           <Card className="mt-4">

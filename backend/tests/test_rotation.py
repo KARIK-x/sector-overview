@@ -54,3 +54,10 @@ def test_transition():
     assert transition("LAGGING", "WINNING") == "LAGGING->WINNING"
     assert transition("WINNING", "WINNING") is None
     assert transition(None, "WINNING") is None
+
+
+def test_relative_strength_ratio_aligns_pairs():
+    sector = [100.0, None, 120.0, 132.0]
+    market = [100.0, 105.0, None, 115.0]
+    # Uses only the two complete aligned pairs: 100->132 and 100->115.
+    assert relative_strength_ratio(sector, market, 1) == pytest.approx((132 / 100) / (115 / 100))

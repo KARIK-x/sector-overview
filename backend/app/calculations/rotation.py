@@ -13,6 +13,7 @@ Quadrants:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -52,12 +53,15 @@ def relative_strength_ratio(
 ) -> float | None:
     if window <= 0:
         return None
-    s = [v for v in sector_values if v is not None]
-    m = [v for v in market_values if v is not None]
-    if len(s) < window + 1 or len(m) < window + 1:
+    pairs = [
+        (float(s), float(m))
+        for s, m in zip(sector_values, market_values, strict=False)
+        if s is not None and m is not None and math.isfinite(s) and math.isfinite(m)
+    ]
+    if len(pairs) < window + 1:
         return None
-    s0, s1 = s[-1 - window], s[-1]
-    m0, m1 = m[-1 - window], m[-1]
+    s0, m0 = pairs[-1 - window]
+    s1, m1 = pairs[-1]
     if s0 == 0 or m0 == 0:
         return None
     return (s1 / s0) / (m1 / m0)

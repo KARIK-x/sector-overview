@@ -29,6 +29,7 @@ export function RotationQuadrant({
   height = 520,
   showTrails = true,
   selected,
+  watched = [],
   onSelect,
   compact = false,
   bubbleMetric = 'none',
@@ -39,6 +40,7 @@ export function RotationQuadrant({
   height?: number
   showTrails?: boolean
   selected?: string | null
+  watched?: string[]
   onSelect?: (code: string) => void
   compact?: boolean
   bubbleMetric?: BubbleMetric
@@ -72,25 +74,44 @@ export function RotationQuadrant({
           const row = rows.find((r) => r.code === code)
           const color = quadrantColor(row?.quadrant, isDark)
           const last = points[points.length - 1]
+          const isSelected = selected === code
           return {
             type: 'line' as const,
             name: `${row?.name ?? code} trail`,
-            data: points.map((t) => [t.absolute_strength, t.relative_strength]),
+            data: points.map((t) => ({
+              value: [t.absolute_strength, t.relative_strength],
+              date: t.date,
+              quadrant: t.quadrant,
+            })),
             symbol: 'none',
-            silent: true,
+            silent: !isSelected,
             animation: false,
-            lineStyle: { width: 1, color, opacity: 0.22 },
+            lineStyle: {
+              width: isSelected ? 2.4 : watched.includes(code) ? 1.6 : 1,
+              color,
+              opacity: isSelected ? 0.88 : watched.includes(code) ? 0.42 : selected ? 0.14 : 0.24,
+            },
             emphasis: { disabled: true },
-            tooltip: { show: false },
-            z: 1,
+            tooltip: isSelected
+              ? {
+                  show: true,
+                  formatter: (params: unknown) => {
+                    const d = params as { data?: { date?: string; value?: [number, number] } }
+                    const point = d.data
+                    if (!point?.value) return ''
+                    return `<div style="min-width:150px"><b>${row?.name ?? code}</b><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:${p.muted};margin-bottom:6px">${point.date ?? ''}</div><div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Absolute</span><b style="font-family:'IBM Plex Mono',monospace">${signedPct(point.value[0])}</b></div><div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Relative</span><b style="font-family:'IBM Plex Mono',monospace">${signedPct(point.value[1])}</b></div></div>`
+                  },
+                }
+              : { show: false },
+            z: isSelected ? 4 : 1,
             markPoint:
               last && row
                 ? {
                     symbol: 'circle',
-                    symbolSize: 4,
+                    symbolSize: isSelected ? 7 : 4,
                     silent: true,
                     label: { show: false },
-                    itemStyle: { color, opacity: 0.5 },
+                    itemStyle: { color, opacity: isSelected ? 0.95 : 0.5 },
                     data: [{ coord: [last.absolute_strength, last.relative_strength] }],
                   }
                 : undefined,
@@ -130,8 +151,8 @@ export function RotationQuadrant({
       value: [r.absolute_strength, r.relative_strength],
       itemStyle: {
         color: quadrantColor(r.quadrant, isDark),
-        borderColor: p.surface,
-        borderWidth: selected === r.code ? 2.5 : 1.5,
+        borderColor: selected === r.code ? p.ink : watched.includes(r.code) ? p.accent : p.surface,
+        borderWidth: selected === r.code ? 2.5 : watched.includes(r.code) ? 2 : 1.5,
         opacity: selected && selected !== r.code ? 0.45 : 1,
         shadowBlur: selected === r.code ? 14 : 0,
         shadowColor: quadrantColor(r.quadrant, isDark),
