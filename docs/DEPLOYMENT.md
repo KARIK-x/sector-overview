@@ -263,3 +263,32 @@ provider-level rate limiter. All payloads are cached for 90 s, which bounds data
 - [ ] A hard refresh on a lazy route works (SPA fallback)
 - [ ] Dark theme persists across reloads
 - [ ] Cold-start behaviour is acceptable (or a paid/always-on host is chosen)
+
+---
+
+## 4. Daily refresh automation
+
+The warehouse is refreshed by running the same idempotent ingestion command:
+
+```bash
+python scripts/ingest.py all
+```
+
+### Hosted daily refresh
+
+Add `DATABASE_URL` as a repository secret, then enable `.github/workflows/daily-ingest.yml`.
+The workflow runs at 18:00 UTC and can also be started manually from the Actions tab.
+
+This is the recommended production pattern: the web service stays read-only, and the scheduled
+job writes to the same PostgreSQL database.
+
+### Local daily refresh
+
+If the application runs on a machine that is on at the scheduled time:
+
+```bash
+0 18 * * * cd "/Users/ashim/Downloads/sector overview" && backend/.venv/bin/python scripts/ingest.py all >> backend/data/refresh.log 2>&1
+```
+
+Local SQLite refreshes are fine for a personal workstation. For a shared deployment, use PostgreSQL
+and the GitHub Actions workflow above.
