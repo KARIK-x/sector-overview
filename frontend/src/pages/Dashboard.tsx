@@ -451,24 +451,21 @@ export default function Dashboard() {
 
       <SessionBrief data={data} />
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <div className="mt-4">
         <Card>
           <CardHeader
             eyebrow="Rotation map · 20 sessions"
             title="Absolute vs relative strength"
-            subtitle="x = sector return, y = excess return over NEPSE. Drag your eye to the top-right for leadership."
+            subtitle="x = sector return, y = excess return over NEPSE. The top-right quadrant is leadership."
             actions={<Link to="/rotation" className="btn text-[11px]"><LineIcon /> Open lab</Link>}
           />
           <RotationQuadrant
             rows={data.rotation.rows}
             trails={trails?.trails}
-            height={430}
+            height={500}
             exportName="dashboard-rotation-map"
             onSelect={(code) => navigate(`/sectors?code=${code}`)}
           />
-        </Card>
-        <Card>
-          <LeadershipBoard rows={data.rotation.rows} transitions={data.rotation.transitions} />
         </Card>
       </div>
 
@@ -484,7 +481,10 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <LeadershipBoard rows={data.rotation.rows} transitions={data.rotation.transitions} />
+        </Card>
         <ContributionCard data={data} />
       </div>
 
