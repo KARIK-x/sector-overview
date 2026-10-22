@@ -377,4 +377,11 @@ def ingest_all(session: Session, include_summaries: bool = True) -> dict[str, in
     }
     if include_summaries:
         out["daily_summaries"] = ingest_daily_summaries(session)
+    try:
+        from ..services import analytics, cache
+
+        cache.clear()
+        analytics.precompute_standard_caches(session)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Standard cache precompute failed: %s", exc)
     return out

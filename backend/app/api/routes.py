@@ -6,7 +6,16 @@ from sqlalchemy.orm import Session
 from ..calculations.rotation import QUADRANTS
 from ..db import get_session
 from ..ingestion.sources import SECTOR_BY_CODE, SECTOR_BY_NAME
-from ..services import analytics, cache
+from ..services import cache
+
+_analytics_module = None
+
+
+def _analytics():
+    global _analytics_module
+    if _analytics_module is None:
+        from ..services import analytics as _analytics_module
+    return _analytics_module
 
 router = APIRouter(prefix="/api")
 
@@ -24,7 +33,7 @@ def meta() -> dict:
         "name": "NEPSE Sector Intelligence",
         "version": "0.1.0",
         "quadrants": list(QUADRANTS),
-        "horizons": list(analytics.HORIZONS),
+        "horizons": list(_analytics().HORIZONS),
         "statuses": [
             "VERIFIED",
             "PROVISIONAL",
@@ -38,17 +47,17 @@ def meta() -> dict:
 
 @router.get("/sectors")
 def sectors(session: Session = Depends(get_session)):
-    return cache.memo("sectors", TTL, lambda: analytics.sector_meta(session))
+    return cache.memo("sectors", TTL, lambda: _analytics().sector_meta(session))
 
 
 @router.get("/dashboard")
 def dashboard(session: Session = Depends(get_session)):
-    return cache.memo("dashboard", TTL, lambda: analytics.dashboard_payload(session))
+    return cache.memo("dashboard", TTL, lambda: _analytics().dashboard_payload(session))
 
 
 @router.get("/heatmap")
 def heatmap(session: Session = Depends(get_session)):
-    return cache.memo("heatmap", TTL, lambda: analytics.heatmap_payload(session))
+    return cache.memo("heatmap", TTL, lambda: _analytics().heatmap_payload(session))
 
 
 @router.get("/rotation")
@@ -60,7 +69,7 @@ def rotation(
 ):
     key = f"rotation:{window}:{abs_threshold}:{rel_threshold}"
     return cache.memo(
-        key, TTL, lambda: analytics.rotation_payload(session, window, abs_threshold, rel_threshold)
+        key, TTL, lambda: _analytics().rotation_payload(session, window, abs_threshold, rel_threshold)
     )
 
 
@@ -76,7 +85,7 @@ def rotation_trails(
     return cache.memo(
         key,
         TTL,
-        lambda: analytics.rotation_trails(session, window, sessions, abs_threshold, rel_threshold),
+        lambda: _analytics().rotation_trails(session, window, sessions, abs_threshold, rel_threshold),
     )
 
 
@@ -89,7 +98,7 @@ def rotation_history(
     return cache.memo(
         f"rotation-history:{window}:{sessions}",
         TTL,
-        lambda: analytics.rotation_history(session, window, sessions),
+        lambda: _analytics().rotation_history(session, window, sessions),
     )
 
 
@@ -104,7 +113,7 @@ def compare(
         return cache.memo(
             f"compare:{codes}:{start}:{end}",
             TTL,
-            lambda: analytics.compare_series(session, codes.split(","), start, end),
+            lambda: _analytics().compare_series(session, codes.split(","), start, end),
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown series: {exc.args[0]}") from exc
@@ -117,7 +126,7 @@ def sector_detail(code: str, session: Session = Depends(get_session)):
     resolved = code.upper()
     try:
         return cache.memo(
-            f"sector:{resolved}", TTL, lambda: analytics.sector_detail(session, resolved)
+            f"sector:{resolved}", TTL, lambda: _analytics().sector_detail(session, resolved)
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown sector code: {code}") from exc
@@ -127,18 +136,18 @@ def sector_detail(code: str, session: Session = Depends(get_session)):
 def breadth(sector: str | None = Query(None), session: Session = Depends(get_session)):
     if sector:
         return cache.memo(
-            f"breadth:{sector}", TTL, lambda: analytics.sector_breadth(session, sector)
+            f"breadth:{sector}", TTL, lambda: _analytics().sector_breadth(session, sector)
         )
-    return cache.memo("breadth", TTL, lambda: analytics.breadth_summary(session))
+    return cache.memo("breadth", TTL, lambda: _analytics().breadth_summary(session))
 
 
 @router.get("/liquidity")
 def liquidity(sector: str | None = Query(None), session: Session = Depends(get_session)):
     if sector:
         return cache.memo(
-            f"liquidity:{sector}", TTL, lambda: analytics.sector_liquidity(session, sector)
+            f"liquidity:{sector}", TTL, lambda: _analytics().sector_liquidity(session, sector)
         )
-    return cache.memo("liquidity", TTL, lambda: analytics.liquidity_summary(session))
+    return cache.memo("liquidity", TTL, lambda: _analytics().liquidity_summary(session))
 
 
 @router.get("/risk")
@@ -148,14 +157,14 @@ def risk(sector: str | None = Query(None), session: Session = Depends(get_sessio
         if source is None:
             raise HTTPException(status_code=404, detail=f"Unknown sector: {sector}")
         return cache.memo(
-            f"risk:{source.code}", TTL, lambda: analytics.sector_risk(session, source.code)
+            f"risk:{source.code}", TTL, lambda: _analytics().sector_risk(session, source.code)
         )
-    return cache.memo("risk", TTL, lambda: analytics.risk_summary(session))
+    return cache.memo("risk", TTL, lambda: _analytics().risk_summary(session))
 
 
 @router.get("/fundamentals")
 def fundamentals(session: Session = Depends(get_session)):
-    return cache.memo("fundamentals", TTL, lambda: analytics.fundamentals_payload(session))
+    return cache.memo("fundamentals", TTL, lambda: _analytics().fundamentals_payload(session))
 
 
 @router.get("/factors")
@@ -177,25 +186,25 @@ def factors(
         "trend": weight_trend,
     }
     return cache.memo(
-        f"factors:{tuple(sorted(weights.items()))}", TTL, lambda: analytics.factors_payload(session, weights)
+        f"factors:{tuple(sorted(weights.items()))}", TTL, lambda: _analytics().factors_payload(session, weights)
     )
 
 
 @router.get("/research")
 def research(session: Session = Depends(get_session)):
-    return cache.memo("research", TTL, lambda: analytics.research_payload(session))
+    return cache.memo("research", TTL, lambda: _analytics().research_payload(session))
 
 
 @router.get("/events")
 def events(session: Session = Depends(get_session)):
-    return analytics.events_payload(session)
+    return _analytics().events_payload(session)
 
 
 @router.get("/data-quality")
 def data_quality(session: Session = Depends(get_session)):
-    return cache.memo("data-quality", TTL, lambda: analytics.data_quality_payload(session))
+    return cache.memo("data-quality", TTL, lambda: _analytics().data_quality_payload(session))
 
 
 @router.get("/methodology")
 def methodology() -> dict:
-    return analytics.methodology_payload()
+    return _analytics().methodology_payload()

@@ -390,6 +390,16 @@ export interface DashboardPayload {
   market: MarketOverview
   rotation: { window: number; rows: RotationRow[]; transitions: TransitionEvent[] }
   heatmap: HeatmapPayload
+  trails?: TrailsPayload
+  period_winners?: Array<{
+    window: number
+    label: string
+    leader: string | null
+    leader_return: number | null
+    laggard: string | null
+    laggard_return: number | null
+    market_return: number | null
+  }>
   liquidity: LiquiditySummary
   breadth: BreadthSummary
   risk: RiskSummary

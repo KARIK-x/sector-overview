@@ -404,17 +404,15 @@ function ContributionCard({ data }: { data: DashboardPayload }) {
   )
 }
 
-function PeriodWinnersCard() {
-  const q5 = useQuery({ queryKey: ['rotation', 5, 0, 0], queryFn: () => api.rotation(5, 0, 0) })
-  const q21 = useQuery({ queryKey: ['rotation', 21, 0, 0], queryFn: () => api.rotation(21, 0, 0) })
-  const q63 = useQuery({ queryKey: ['rotation', 63, 0, 0], queryFn: () => api.rotation(63, 0, 0) })
-  const q252 = useQuery({ queryKey: ['rotation', 252, 0, 0], queryFn: () => api.rotation(252, 0, 0) })
-  const periods = [
-    { label: '5 sessions (~1 week)', data: q5.data },
-    { label: '21 sessions (~1 month)', data: q21.data },
-    { label: '63 sessions (~3 months)', data: q63.data },
-    { label: '252 sessions (~12 months)', data: q252.data },
-  ]
+function PeriodWinnersCard({ data }: { data: DashboardPayload }) {
+  const periods = (data.period_winners ?? []).map((p) => ({
+    label: `${p.window} sessions`,
+    leader: p.leader,
+    leaderReturn: p.leader_return,
+    laggard: p.laggard,
+    laggardReturn: p.laggard_return,
+    marketReturn: p.market_return,
+  }))
   return (
     <Card>
       <CardHeader
@@ -436,21 +434,16 @@ function PeriodWinnersCard() {
             </tr>
           </thead>
           <tbody>
-            {periods.map((p) => {
-              const rows = p.data?.rows ?? []
-              const leader = [...rows].sort((a, b) => (b.absolute_strength ?? -Infinity) - (a.absolute_strength ?? -Infinity))[0]
-              const laggard = [...rows].sort((a, b) => (a.absolute_strength ?? Infinity) - (b.absolute_strength ?? Infinity))[0]
-              return (
-                <tr key={p.label}>
-                  <td className="text-[11px]">{p.label}</td>
-                  <td>{leader?.name ?? '—'}</td>
-                  <td className={cn('num text-right', toneClass(leader?.absolute_strength))}>{signedPct(leader?.absolute_strength)}</td>
-                  <td>{laggard?.name ?? '—'}</td>
-                  <td className={cn('num text-right', toneClass(laggard?.absolute_strength))}>{signedPct(laggard?.absolute_strength)}</td>
-                  <td className={cn('num text-right', toneClass(p.data?.market_return))}>{signedPct(p.data?.market_return)}</td>
-                </tr>
-              )
-            })}
+            {periods.map((p) => (
+              <tr key={p.label}>
+                <td className="text-[11px]">{p.label}</td>
+                <td>{p.leader ?? '—'}</td>
+                <td className={cn('num text-right', toneClass(p.leaderReturn))}>{signedPct(p.leaderReturn)}</td>
+                <td>{p.laggard ?? '—'}</td>
+                <td className={cn('num text-right', toneClass(p.laggardReturn))}>{signedPct(p.laggardReturn)}</td>
+                <td className={cn('num text-right', toneClass(p.marketReturn))}>{signedPct(p.marketReturn)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -466,11 +459,6 @@ export default function Dashboard() {
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['dashboard'],
     queryFn: api.dashboard,
-  })
-  const { data: trails } = useQuery({
-    queryKey: ['trails', 20, 24],
-    queryFn: () => api.trails(20, 24),
-    staleTime: 5 * 60_000,
   })
 
   if (isLoading) {
@@ -509,7 +497,7 @@ export default function Dashboard() {
       <SessionBrief data={data} />
 
       <div className="mt-4">
-        <PeriodWinnersCard />
+        <PeriodWinnersCard data={data} />
       </div>
 
       <div className="mt-4">
@@ -522,7 +510,7 @@ export default function Dashboard() {
           />
           <RotationQuadrant
             rows={data.rotation.rows}
-            trails={trails?.trails}
+            trails={data?.trails?.trails}
             height={500}
             exportName="dashboard-rotation-map"
             onSelect={(code) => navigate(`/sectors?code=${code}`)}

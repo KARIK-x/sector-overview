@@ -615,7 +615,9 @@ def heatmap_payload(session: Session):
     return {"horizons": list(HORIZONS), "rows": rows, "latest_date": _date_str(_latest(frame))}
 
 
-def _summary_agg(session: Session, sector_name: str | None = None) -> pd.DataFrame:
+def _summary_agg(
+    session: Session, sector_name: str | None = None, recent_dates: list[Any] | None = None
+) -> pd.DataFrame:
     stmt = select(
         DailySummary.trade_date,
         DailySummary.sector_name,
@@ -625,6 +627,8 @@ def _summary_agg(session: Session, sector_name: str | None = None) -> pd.DataFra
     ).where(DailySummary.pct_change.is_not(None))
     if sector_name:
         stmt = stmt.where(DailySummary.sector_name == sector_name)
+    if recent_dates:
+        stmt = stmt.where(DailySummary.trade_date.in_(recent_dates))
     stmt = stmt.group_by(DailySummary.trade_date, DailySummary.sector_name).order_by(
         DailySummary.trade_date
     )
@@ -637,6 +641,13 @@ def _summary_agg(session: Session, sector_name: str | None = None) -> pd.DataFra
 
 
 def breadth_summary(session: Session, sector_name: str | None = None) -> dict:
+    recent_dates = session.scalars(
+        select(DailySummary.trade_date)
+        .where(DailySummary.pct_change.is_not(None))
+        .distinct()
+        .order_by(DailySummary.trade_date.desc())
+        .limit(260)
+    ).all()
     stmt = select(
         DailySummary.sector_name,
         DailySummary.trade_date,
@@ -644,7 +655,7 @@ def breadth_summary(session: Session, sector_name: str | None = None) -> dict:
         func.sum(case((DailySummary.pct_change < 0, 1), else_=0)).label("declines"),
         func.sum(case((DailySummary.pct_change == 0, 1), else_=0)).label("unchanged"),
         func.count(DailySummary.symbol).label("traded"),
-    ).where(DailySummary.pct_change.is_not(None))
+    ).where(DailySummary.pct_change.is_not(None), DailySummary.trade_date.in_(recent_dates))
     if sector_name:
         stmt = stmt.where(DailySummary.sector_name == sector_name)
     stmt = stmt.group_by(DailySummary.sector_name, DailySummary.trade_date).order_by(
@@ -808,7 +819,14 @@ def sector_breadth(session: Session, sector_name: str) -> dict:
 
 
 def liquidity_summary(session: Session) -> dict:
-    df = _summary_agg(session)
+    recent_dates = session.scalars(
+        select(DailySummary.trade_date)
+        .where(DailySummary.pct_change.is_not(None))
+        .distinct()
+        .order_by(DailySummary.trade_date.desc())
+        .limit(260)
+    ).all()
+    df = _summary_agg(session, recent_dates=recent_dates)
     if df.empty:
         return {"available": False, "reason": "No security daily summaries have been ingested."}
     latest = df["trade_date"].max()
@@ -1414,6 +1432,26 @@ def dashboard_payload(session: Session) -> dict:
         key=lambda r: r["relative_strength"],
         reverse=True,
     )
+    period_winners = []
+    for window in (5, 21, 63, 252):
+        rows = rotation_rows(frame, window, 0.0, 0.0)
+        valid = [r for r in rows if r.get("absolute_strength") is not None]
+        leader = max(valid, key=lambda r: r["absolute_strength"], default=None)
+        laggard = min(valid, key=lambda r: r["absolute_strength"], default=None)
+        period_winners.append(
+            {
+                "window": window,
+                "label": f"{window} sessions (~{window // 5} week{'s' if window != 5 else ''})",
+                "leader": leader["name"] if leader else None,
+                "leader_return": leader["absolute_strength"] if leader else None,
+                "laggard": laggard["name"] if laggard else None,
+                "laggard_return": laggard["absolute_strength"] if laggard else None,
+                "market_return": _ret(frame[NEPSE_INDEX_CODE], window) if NEPSE_INDEX_CODE in frame.columns else None,
+            }
+        )
+
+
+
     return {
         "market": market_overview(session),
         "rotation": {
@@ -1422,6 +1460,8 @@ def dashboard_payload(session: Session) -> dict:
             "transitions": transitions[:12],
         },
         "heatmap": heat,
+        "trails": rotation_trails(session, 20, 24),
+        "period_winners": period_winners,
         "liquidity": {
             # The dashboard only needs the latest cross-section; the 260-session
             # turnover history stays on /api/liquidity.
@@ -1594,3 +1634,44 @@ def methodology_payload() -> dict:
             "Corporate events and advanced forecasting are not fabricated.",
         ],
     }
+
+
+def precompute_standard_caches(session: Session) -> None:
+    """Warm the read-only payload cache during ingestion.
+
+    The dataset is immutable between ingests, so every standard view can be
+    computed once and served from disk on subsequent process starts.
+    """
+    from . import cache
+
+    ttl = cache.DEFAULT_TTL
+    cache.memo("dashboard", ttl, lambda: dashboard_payload(session))
+    cache.memo("heatmap", ttl, lambda: heatmap_payload(session))
+    cache.memo("risk", ttl, lambda: risk_summary(session))
+    cache.memo("liquidity", ttl, lambda: liquidity_summary(session))
+    cache.memo("breadth", ttl, lambda: breadth_summary(session))
+    cache.memo("fundamentals", ttl, lambda: fundamentals_payload(session))
+    cache.memo("research", ttl, lambda: research_payload(session))
+    cache.memo("data-quality", ttl, lambda: data_quality_payload(session))
+    for window in (5, 10, 20, 60, 120):
+        cache.memo(
+            f"rotation:{window}:0.0:0.0",
+            ttl,
+            lambda window=window: rotation_payload(session, window, 0.0, 0.0),
+        )
+    cache.memo("trails:20:24:0.0:0.0", ttl, lambda: rotation_trails(session, 20, 24, 0.0, 0.0))
+    cache.memo("rotation-history:20:120", ttl, lambda: rotation_history(session, 20, 120))
+    for code in SECTOR_BY_CODE:
+        cache.memo(f"sector:{code}", ttl, lambda code=code: sector_detail(session, code))
+        cache.memo(f"risk:{code}", ttl, lambda code=code: sector_risk(session, code))
+        name = SECTOR_BY_CODE[code].name
+        cache.memo(f"liquidity:{name}", ttl, lambda name=name: sector_liquidity(session, name))
+        cache.memo(f"breadth:{name}", ttl, lambda name=name: sector_breadth(session, name))
+    cache.memo(
+        "factors:" + str(tuple(sorted({"momentum_20": 25.0, "relative_20": 25.0, "momentum_accel": 15.0, "low_volatility": 10.0, "liquidity": 10.0, "trend": 15.0}.items()))),
+        ttl,
+        lambda: factors_payload(
+            session,
+            {"momentum_20": 25, "relative_20": 25, "momentum_accel": 15, "low_volatility": 10, "liquidity": 10, "trend": 15},
+        ),
+    )
