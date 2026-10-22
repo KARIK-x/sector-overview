@@ -32,7 +32,7 @@ export function Chart({
   }, [isDark, option])
 
   return (
-    <div ref={wrap} className="chart-frame relative">
+    <div ref={wrap} className="chart-frame relative" role="img" aria-label={exportName ? `${exportName} chart` : 'Chart'}>
       <div className={className} style={{ height }} data-theme={isDark ? 'dark' : 'light'}>
         <ReactEChartsCore
           echarts={echarts}

@@ -186,7 +186,7 @@ Four sub-indices cover materially less than the NEPSE calendar:
 
 * Canvas charts are not exposed to screen readers; table/text equivalents exist but were not audited
   with VoiceOver or NVDA.
-* ECharts animation is not tied to `prefers-reduced-motion` (CSS transitions are).
+* ECharts animation and CSS transitions both respect `prefers-reduced-motion`.
 * Focus states, skip link and ARIA labels on controls are implemented, but a formal WCAG audit has
   not been run.
 

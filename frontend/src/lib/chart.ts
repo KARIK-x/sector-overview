@@ -63,9 +63,13 @@ export function heatColor(v: number | null | undefined, maxAbs: number, dark: bo
 
 export function baseOption(dark: boolean): EChartsOption {
   const p = palette(dark)
+  const reduceMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
   return {
     backgroundColor: 'transparent',
-    animationDuration: 480,
+    animation: !reduceMotion,
+    animationDuration: reduceMotion ? 0 : 480,
     animationEasing: 'cubicOut',
     textStyle: {
       fontFamily: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",

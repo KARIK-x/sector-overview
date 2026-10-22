@@ -145,7 +145,7 @@ screenshot.
 | Chart legibility | `TESTED-PASS` | Full-width heatmap, log P/E dot plot, outlier-only risk labels, label overlap hiding |
 | Empty/unavailable states | `TESTED-PASS` | Events, Mutual Fund fundamentals, sparse data |
 | Consistency | `TESTED-PASS` | Shared Card/Chart/status primitives; quadrant colours fixed |
-| Accessibility | `NOT-TESTED` | Canvas charts have text/table neighbours; no formal WCAG or screen-reader audit |
+| Accessibility | `NOT-TESTED` | Canvas charts have text/table neighbours and now carry an `aria-label`; reduced motion is respected; no formal WCAG or screen-reader audit |
 | Cross-browser | `TESTED-PASS` (Chrome/Firefox) · `BLOCKED` (WebKit) | WebKit crashes on this host |
 
 **Deliberate omissions:** no glassmorphism/blur effects, no decorative gauges, no fake AI scores, no
