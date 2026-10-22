@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from ..calculations.rotation import QUADRANTS
 from ..db import get_session
-from ..ingestion.sources import SECTOR_BY_CODE, SECTOR_BY_NAME
 from ..services import cache
 
 _analytics_module = None
@@ -153,6 +152,8 @@ def liquidity(sector: str | None = Query(None), session: Session = Depends(get_s
 @router.get("/risk")
 def risk(sector: str | None = Query(None), session: Session = Depends(get_session)):
     if sector:
+        from ..ingestion.sources import SECTOR_BY_CODE, SECTOR_BY_NAME
+
         source = SECTOR_BY_NAME.get(sector.lower()) or SECTOR_BY_CODE.get(sector.upper())
         if source is None:
             raise HTTPException(status_code=404, detail=f"Unknown sector: {sector}")

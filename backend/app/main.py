@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import router
 from .api.serialize import clean_json
 from .config import BASE_DIR, settings
-from .db import SessionLocal, init_db
+from .db import SessionLocal
 from .services import cache
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -26,6 +26,8 @@ class SafeJSONResponse(JSONResponse):
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    from .db import init_db
+
     init_db()
     try:
         with SessionLocal() as session:
