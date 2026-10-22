@@ -2,8 +2,8 @@ name: Daily NEPSE ingestion
 
 on:
   schedule:
-    # 18:00 UTC is after the NEPSE close and gives the public mirrors time to update.
-    - cron: '0 18 * * *'
+    # 09:45 UTC is 3:30 PM Nepal time, after the NEPSE close.
+    - cron: '45 9 * * *'
   workflow_dispatch:
 
 jobs:
