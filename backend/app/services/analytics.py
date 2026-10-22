@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import time
 from datetime import date
 from typing import Any
 
@@ -60,6 +61,25 @@ from ..models import (
 
 HORIZONS = (1, 5, 10, 20, 60, 120, 252)
 
+_FRAME_CACHE: dict[str, tuple[float, pd.DataFrame]] = {}
+_CONTEXT_CACHE: dict[str, tuple[float, tuple[dict[str, dict[str, Any]], date | None]]] = {}
+_CACHE_TTL = 300.0
+
+
+def _cache_key(session: Session) -> str:
+    return str(session.bind.url)
+
+
+def clear_caches() -> None:
+    """Clear in-process analytics caches (used by tests and ingestion refreshes)."""
+    _FRAME_CACHE.clear()
+    _CONTEXT_CACHE.clear()
+    from . import cache as _payload_cache
+
+    _payload_cache.clear()
+
+
+
 FORBIDDEN_OHLC_KEY = "ohlc"
 
 
@@ -72,6 +92,12 @@ def sector_symbol(code: str) -> str:
 
 
 def load_index_frame(session: Session) -> pd.DataFrame:
+    key = _cache_key(session)
+    now = time.monotonic()
+    hit = _FRAME_CACHE.get(key)
+    if hit is not None and now - hit[0] < _CACHE_TTL:
+        return hit[1].copy()
+
     rows = session.execute(
         select(
             IndexObservation.index_code,
@@ -88,7 +114,8 @@ def load_index_frame(session: Session) -> pd.DataFrame:
         index="trade_date", columns="index_code", values="close", aggfunc="last"
     ).sort_index()
     pivot.index = pd.to_datetime(pivot.index)
-    return pivot
+    _FRAME_CACHE[key] = (time.monotonic(), pivot)
+    return pivot.copy()
 
 
 def sector_meta(session: Session) -> list[dict[str, Any]]:
@@ -197,6 +224,12 @@ def rotation_rows(frame: pd.DataFrame, window: int, abs_thr: float, rel_thr: flo
 
 
 def sector_context(session: Session) -> tuple[dict[str, dict[str, Any]], date | None]:
+    key = _cache_key(session)
+    now = time.monotonic()
+    hit = _CONTEXT_CACHE.get(key)
+    if hit is not None and now - hit[0] < _CACHE_TTL:
+        return hit[1]
+
     """Latest-day cross-section used to size and annotate sector bubbles.
 
     One query for turnover/breadth (grouped by sector), one for market cap, and
@@ -275,7 +308,9 @@ def sector_context(session: Session) -> tuple[dict[str, dict[str, Any]], date | 
                     "top1_share": float(shares.max()),
                 }
             )
-    return ctx, latest
+    result = (ctx, latest)
+    _CONTEXT_CACHE[key] = (time.monotonic(), result)
+    return result
 
 
 def rotation_payload(session: Session, window: int = 20, abs_thr: float = 0.0, rel_thr: float = 0.0):

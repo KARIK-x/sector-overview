@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from .api.routes import router
 from .api.serialize import clean_json
 from .config import BASE_DIR, settings
-from .db import init_db
+from .db import SessionLocal, init_db
+from .services import analytics, cache
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -26,6 +27,13 @@ class SafeJSONResponse(JSONResponse):
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     init_db()
+    try:
+        with SessionLocal() as session:
+            analytics.load_index_frame(session)
+            cache.memo("dashboard", cache.DEFAULT_TTL, lambda: analytics.dashboard_payload(session))
+            cache.memo("liquidity", cache.DEFAULT_TTL, lambda: analytics.liquidity_summary(session))
+    except Exception:  # noqa: BLE001
+        logging.exception("Startup cache warmup failed")
     yield
 
 
@@ -46,6 +54,15 @@ app.add_middleware(
 )
 # JSON payloads compress by roughly 6–8×, which matters on free-tier bandwidth.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def cache_control(request, call_next):
+    response = await call_next(request)
+    if request.method == "GET" and request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "public, max-age=60")
+    return response
+
 
 app.include_router(router)
 

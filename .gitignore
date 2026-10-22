@@ -36,3 +36,4 @@ backend/data/raw/
 
 # Tooling residue
 .playwright-mcp/
+.neon
