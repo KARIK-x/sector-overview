@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nepse-sector-intelligence
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+
+  - type: cron
+    name: nepse-daily-ingest
+    runtime: docker
+    schedule: "0 18 * * *"
+    dockerCommand: python /app/scripts/ingest.py all
+    envVars:
+      - key: DATABASE_URL
+        sync: false
