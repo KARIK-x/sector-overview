@@ -287,7 +287,7 @@ job writes to the same PostgreSQL database.
 If the application runs on a machine that is on at the scheduled time:
 
 ```bash
-0 18 * * * cd "/Users/ashim/Downloads/sector overview" && backend/.venv/bin/python scripts/ingest.py all >> backend/data/refresh.log 2>&1
+30 15 * * * cd "/Users/ashim/Downloads/sector overview" && backend/.venv/bin/python scripts/ingest.py all >> backend/data/refresh.log 2>&1
 ```
 
 Local SQLite refreshes are fine for a personal workstation. For a shared deployment, use PostgreSQL
