@@ -41,7 +41,7 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | CSV / PNG exports | `TESTED-PASS` | Real downloads inspected: non-empty files, expected headers/PNG dimensions |
 | Cross-browser | `TESTED-PASS` (Chrome 36, Firefox 76) · `BLOCKED` (WebKit) | Playwright WebKit crashes with a host `Bus error`; Safari remains unverified |
 | PostgreSQL path | `NOT-TESTED` | No PostgreSQL server in this environment; SQLite is the live store |
-| Docker image | `NOT-TESTED` | Dockerfile present; image not built here |
+| Docker image | `TESTED-PASS` | Multi-stage build succeeded; container served `/api/health` and the SPA (`nsi:local`) |
 | Public deployment | `NOT-TESTED` | Free-tier options researched; no account/credentials used |
 | Screen-reader / WCAG audit | `NOT-TESTED` | Keyboard palette and focus styles implemented; no VoiceOver/NVDA run |
 | Load / soak testing | `NOT-TESTED` | No concurrent-user benchmark run |

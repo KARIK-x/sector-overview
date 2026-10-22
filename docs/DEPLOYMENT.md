@@ -72,8 +72,9 @@ across restarts. On first run the database is **empty**; exec into the container
 docker exec -it <container> python /app/scripts/ingest.py all
 ```
 
-> The Docker build itself was **not executed** in this environment (`docker` was unavailable). The
-> file is written and reviewed; treat the first build as an unverified step.
+> The Docker build **was executed** in this environment; the multi-stage image (`nsi:local`) built
+> successfully and the container served `/api/health` and `/` on port 8000. The first deployment of a
+> given database still requires ingestion.
 
 For a managed Postgres, drop the volume and set `DATABASE_URL`. The container then becomes stateless
 and can be replaced freely.

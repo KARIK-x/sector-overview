@@ -227,7 +227,7 @@ The screenshot directory contains only these 16 files; exploratory/test captures
 | --- | --- | --- |
 | Safari / WebKit | `BLOCKED` | Playwright WebKit `Bus error` before launch on this host |
 | PostgreSQL | `NOT-TESTED` | No server available; SQLite is live |
-| Docker build / image run | `NOT-TESTED` | Docker daemon not exercised in this pass |
+| Docker build / image run | `TESTED-PASS` | Multi-stage image built; container served `/api/health` and `/` on port 8000 |
 | Public deployment / cold starts | `NOT-TESTED` | No account or credentials used |
 | VoiceOver / NVDA / formal WCAG | `NOT-TESTED` | No assistive-technology audit run |
 | Load / concurrency | `NOT-TESTED` | No benchmark |
