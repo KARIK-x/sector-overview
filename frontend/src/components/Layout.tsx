@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowUpRight, Command, Menu, Moon, Search, Sun, X } from 'lucide-react'
 import { NAV } from '../lib/nav'
+import { BrandMark } from './Brand'
 import { cn, dateLabel } from '../lib/format'
 import { useTheme } from '../lib/useTheme'
 import { useQuery } from '@tanstack/react-query'
@@ -10,22 +11,9 @@ import { api } from '../lib/api'
 function Logo() {
   return (
     <Link to="/" className="group flex items-center gap-3" aria-label="NEPSE Sector Intelligence home">
-      <div className="relative grid h-9 w-9 place-items-center rounded-[10px] bg-[#0e7c66] text-[#f5f3ee] shadow-sm transition-transform group-hover:-rotate-3">
-        <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" aria-hidden>
-          <path
-            d="M6 22l6-7 5 3.6L25 9"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="25" cy="9" r="2" fill="currentColor" />
-        </svg>
-      </div>
+      <BrandMark className="transition-transform group-hover:-rotate-6" />
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-semibold leading-tight tracking-[-0.01em]">
-          NEPSE Sector
-        </div>
+        <div className="truncate text-[13px] font-semibold leading-tight tracking-[-0.01em]">NEPSE Sector</div>
         <div className="eyebrow mt-0.5 text-[9px]">Intelligence</div>
       </div>
     </Link>

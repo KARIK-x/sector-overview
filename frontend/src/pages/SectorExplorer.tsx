@@ -178,6 +178,83 @@ function IndexChart({ detail, range }: { detail: SectorDetail; range: string }) 
   return <Chart option={option} height={380} exportName="sector-price-history" />
 }
 
+function RelativeStrengthChart({ detail, range }: { detail: SectorDetail; range: string }) {
+  const { isDark } = useTheme()
+  const fullRelative = detail.relative_history ?? []
+  const history = range === 'ALL' ? fullRelative : fullRelative.slice(-(range === '1Y' ? 252 : range === '3Y' ? 756 : 1260))
+  const option = useMemo(() => {
+    const p = palette(isDark)
+    const axis = axisStyle(isDark, { split: true, labelSize: 9 })
+    return {
+      ...baseOption(isDark),
+      grid: { left: 52, right: 22, top: 30, bottom: 44 },
+      legend: { ...baseOption(isDark).legend, top: 0, right: 0, data: ['20-session', '60-session', '120-session'] },
+      tooltip: {
+        ...baseOption(isDark).tooltip,
+        trigger: 'axis',
+        axisPointer: { type: 'line', lineStyle: { color: p.faint, type: 'dashed' } },
+        valueFormatter: (v: unknown) => (typeof v === 'number' ? signedPct(v) : '—'),
+      },
+      xAxis: {
+        type: 'category',
+        data: history.map((h) => h.date),
+        boundaryGap: false,
+        ...axis,
+        axisLabel: {
+          ...axis.axisLabel,
+          formatter: (v: string) => dateTick(v, needsYear(history.map((h) => h.date))),
+          hideOverlap: true,
+        },
+      },
+      yAxis: {
+        type: 'value',
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: number) => signedPct(v) },
+      },
+      series: [
+        {
+          name: '20-session',
+          type: 'line',
+          data: history.map((h) => h.rel_20),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.8, color: p.accent },
+          itemStyle: { color: p.accent },
+        },
+        {
+          name: '60-session',
+          type: 'line',
+          data: history.map((h) => h.rel_60),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.4, color: isDark ? '#e8b06a' : '#b06a14' },
+          itemStyle: { color: isDark ? '#e8b06a' : '#b06a14' },
+        },
+        {
+          name: '120-session',
+          type: 'line',
+          data: history.map((h) => h.rel_120),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.2, color: isDark ? '#7ab3e8' : '#2c5d8f', type: 'dashed' },
+          itemStyle: { color: isDark ? '#7ab3e8' : '#2c5d8f' },
+        },
+        {
+          name: 'Zero',
+          type: 'line',
+          data: history.map(() => 0),
+          showSymbol: false,
+          silent: true,
+          lineStyle: { width: 1, color: p.faint, type: 'dashed', opacity: 0.55 },
+          itemStyle: { color: p.faint },
+        },
+      ],
+    } as unknown as EChartsOption
+  }, [history, isDark])
+
+  return <Chart option={option} height={300} exportName="sector-relative-strength" />
+}
+
 function BreadthPanel({ breadth }: { breadth: BreadthDetail }) {
   const { isDark } = useTheme()
   const option = useMemo(() => {
@@ -469,6 +546,19 @@ export default function SectorExplorer() {
                 actions={<Segmented options={RANGE_OPTIONS} value={range} onChange={setRange} size="sm" />}
               />
               <IndexChart detail={data} range={range} />
+              <Card>
+                <CardHeader
+                  eyebrow="Relative strength"
+                  title="Excess return versus NEPSE"
+                  subtitle="Rolling sector return minus NEPSE return over 20, 60 and 120 sessions. Positive means relative leadership."
+                  actions={<Link to="/rotation" className="text-[11px] text-accent hover:underline">Rotation lab</Link>}
+                />
+                <RelativeStrengthChart detail={data} range={range} />
+                <InfoNote>
+                  Excess return is measured on the sector’s own observed dates and aligned to the sector index
+                  history. It is descriptive, not a forecast.
+                </InfoNote>
+              </Card>
             </Card>
 
             <div className="grid gap-4">

@@ -374,6 +374,7 @@ export interface SectorDetail {
   liquidity?: Record<string, unknown> & { available?: boolean }
   fundamentals?: FundamentalRow
   history?: Array<{ date: string; close: number; ma20: number | null; ma50: number | null; ma200: number | null }>
+  relative_history?: Array<{ date: string; sector_close: number; nepse_close: number; rel_20: number | null; rel_60: number | null; rel_120: number | null }>
   observations?: number
   data_quality?: Record<string, string | number>
 }

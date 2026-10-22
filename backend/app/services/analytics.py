@@ -967,6 +967,22 @@ def sector_detail(session: Session, code: str) -> dict:
     breadth = sector_breadth(session, SECTOR_BY_CODE[code].name)
     liq = sector_liquidity(session, SECTOR_BY_CODE[code].name)
     fund = sector_fundamentals_row(session, code)
+    market_values = pair[NEPSE_INDEX_CODE].tolist()
+
+    def rolling_relative(window: int) -> list[float | None]:
+        out: list[float | None] = [None] * len(values)
+        for i in range(window, len(values)):
+            if values[i - window] == 0 or market_values[i - window] == 0:
+                continue
+            sector_ret = values[i] / values[i - window] - 1.0
+            market_ret = market_values[i] / market_values[i - window] - 1.0
+            out[i] = float(sector_ret - market_ret)
+        return out
+
+    rel_20 = rolling_relative(20)
+    rel_60 = rolling_relative(60)
+    rel_120 = rolling_relative(120)
+
     history = [
         {
             "date": _date_str(d),
@@ -977,6 +993,19 @@ def sector_detail(session: Session, code: str) -> dict:
         }
         for i, (d, v) in enumerate(zip(pair.index, values, strict=False))
     ][-750:]
+
+    relative_history = [
+        {
+            "date": _date_str(d),
+            "sector_close": float(v),
+            "nepse_close": float(market_values[i]),
+            "rel_20": rel_20[i],
+            "rel_60": rel_60[i],
+            "rel_120": rel_120[i],
+        }
+        for i, (d, v) in enumerate(zip(pair.index, values, strict=False))
+    ][-750:]
+
     return {
         "code": code,
         "name": SECTOR_BY_CODE[code].name,
@@ -1001,6 +1030,7 @@ def sector_detail(session: Session, code: str) -> dict:
         "liquidity": liq,
         "fundamentals": fund,
         "history": history,
+        "relative_history": relative_history,
         "observations": len(pair),
         "data_quality": {
             "first_date": _date_str(pair.index.min()),

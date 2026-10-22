@@ -1,6 +1,6 @@
 # Visualization Catalog
 
-**27 chart surfaces across nine analytical pages**, plus a small set of HTML-native visual summaries.
+**28 chart surfaces across nine analytical pages**, plus a small set of HTML-native visual summaries.
 Every chart is an explicit Apache ECharts option built from the payload; there are no decorative gauges,
 radar "scores", dual-axis tricks that hide a second scale, or synthetic trend lines. Every chart carries
 a PNG export control.
@@ -41,6 +41,7 @@ HTML-native companions: `LeadershipBoard` (top/bottom five relative bars plus la
 | 4 | **Index structure** | Line + 3 moving averages | x = date; y = index level; close + MA20/50/200; range chips 1Y/3Y/5Y/All | ECharts inside dataZoom slider; PNG export. 750 sessions are carried to the client; the range control slices them. |
 | 5 | **Participation inside the sector** | Stacked bars + line | Bars = advances (up) and declines (down); line = advance share on the right axis; 260 sessions | Hover repeats counts and share. A security without a row is excluded, never treated as unchanged. Current membership is applied to history. |
 | 6 | **Traded value** | Area line | x = date; y = turnover NPR; area fill is decorative | Hover formats NPR. The adjacent HTML bars show the top traded names; turnover is trading value, not inflow. |
+| 6a | **Relative strength persistence** | Multi-line | x = date; y = sector return − NEPSE return over 20/60/120 sessions; zero line | New in Phase 2. Uses `relative_history` from the sector payload; gaps are real missing observations, not zeros. |
 
 HTML-native companions: metric strip, technicals, risk, aggregate fundamentals, member table (scroll
 hint), chips for all 13 sectors.

@@ -354,6 +354,57 @@ function RiskCard({ data }: { data: DashboardPayload }) {
   )
 }
 
+function ContributionCard({ data }: { data: DashboardPayload }) {
+  const { isDark } = useTheme()
+  const rows = (data.rotation.rows ?? [])
+    .filter((r) => r.market_cap != null && r.return_20 != null)
+    .map((r) => ({ ...r, contribution: (r.market_cap ?? 0) * (r.return_20 ?? 0) }))
+  const totalCap = rows.reduce((s, r) => s + (r.market_cap ?? 0), 0)
+  const weighted = rows
+    .map((r) => ({ ...r, weight: totalCap ? (r.market_cap ?? 0) / totalCap : 0, contrib: totalCap ? ((r.market_cap ?? 0) / totalCap) * (r.return_20 ?? 0) : 0 }))
+    .sort((a, b) => Math.abs(b.contrib) - Math.abs(a.contrib))
+  const max = Math.max(0.0001, ...weighted.map((r) => Math.abs(r.contrib)))
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Market structure"
+        title="Cap-weighted contribution to the 20-session move"
+        subtitle="Sector market-cap snapshot × 20-session return. Snapshot weights, not a historical series."
+        actions={<Link to="/liquidity" className="text-[11px] text-accent hover:underline">Liquidity</Link>}
+      />
+      <div className="space-y-2">
+        {weighted.map((r) => {
+          const v = r.contrib
+          return (
+            <div key={r.code} className="flex items-center gap-3">
+              <Link to={`/sectors?code=${r.code}`} className="w-[112px] shrink-0 truncate text-[11px] hover:text-accent">
+                {r.name}
+              </Link>
+              <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-line/60">
+                <div className="absolute left-1/2 top-0 h-full w-px bg-faint/40" />
+                <div
+                  className="absolute top-0 h-full rounded-full"
+                  style={{
+                    width: `${(Math.abs(v) / max) * 50}%`,
+                    left: v >= 0 ? '50%' : `${50 - (Math.abs(v) / max) * 50}%`,
+                    backgroundColor: v >= 0 ? (isDark ? '#4fd1b0' : '#0e7c66') : (isDark ? '#f08a86' : '#b23b3b'),
+                    opacity: 0.85,
+                  }}
+                />
+              </div>
+              <span className={cn('num w-14 text-right text-[10px]', toneClass(v))}>{signedPct(v)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-3 border-t pt-2 text-[10px] text-muted">
+        Based on the {dateLabel(data.market.latest_date)} market-cap snapshot and 20-session returns. Excludes
+        unclassified instruments; not a historical concentration series.
+      </div>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -432,6 +483,10 @@ export default function Dashboard() {
           />
           <SectorHeatmap data={data.heatmap} height={440} onSelect={(code) => navigate(`/sectors?code=${code}`)} />
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <ContributionCard data={data} />
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
