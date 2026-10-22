@@ -192,8 +192,8 @@ made. This is recorded as `BLOCKED`, not as an app failure.
 
 ## 5. Screenshot evidence
 
-Sixteen final PNGs, all captured from the running production build in a **fresh Firefox instance per
-page**. The viewport height was set to the measured content height **before** navigation, so each
+Sixteen final PNGs, all captured from the running production build in a **fresh Chrome instance per
+page** (Playwright `channel: 'chrome'`). The viewport height was set to the measured content height **before** navigation, so each
 image is a single viewport rather than a stitched full-page capture. This avoids the Chromium
 full-page stitching artifacts observed during the build. Text in low-resolution previews was
 re-checked with 2–3× nearest-neighbour crops before any layout conclusion was drawn.
@@ -201,17 +201,17 @@ re-checked with 2–3× nearest-neighbour crops before any layout conclusion was
 | File | Viewport | What it shows |
 | --- | --- | --- |
 | `01-dashboard.png` | 1440×2711 | Full dashboard: lead, rotation, heatmap, breadth, liquidity, risk, trust |
-| `02-rotation-lab.png` | 1440×2998 | Map, table, selected sector, timeline, crossings, axis contract |
-| `03-sector-comparison.png` | 1440×1908 | Rebased multi-series chart and statistics |
+| `02-rotation-lab.png` | 1440×2988 | Map, table, selected sector, timeline, crossings, axis contract |
+| `03-sector-comparison.png` | 1440×1905 | Rebased multi-series chart and statistics |
 | `04-breadth-lab.png` | 1440×2248 | 120-session breadth, divergence, sector width, deep dive |
 | `05-liquidity-lab.png` | 1440×2419 | Stacked turnover, share donut, scatter, concentration |
 | `06-risk-lab.png` | 1440×3153 | Risk/return, volatility, 14×14 correlation, table, drawdown |
 | `07-fundamentals-lab.png` | 1440×2440 | P/E dot plot, ROE bubble, aggregates, member table |
-| `08-sector-explorer.png` | 1440×2902 | Price structure, participation, liquidity, risk, filings |
-| `09-quantitative-research.png` | 1440×2078 | Factor model, ranking, attribution, transitions, backtest |
-| `10-data-quality.png` | 1440×2721 | Coverage, inventory, validation, runs, source register |
+| `08-sector-explorer.png` | 1440×2901 | Price structure, participation, liquidity, risk, filings |
+| `09-quantitative-research.png` | 1440×2066 | Factor model, ranking, attribution, transitions, backtest |
+| `10-data-quality.png` | 1440×2718 | Coverage, inventory, validation, runs, source register |
 | `11-events-research.png` | 1440×1211 | Planned coverage and `UNAVAILABLE` source status |
-| `12-methodology.png` | 1440×4000 | Full method reference |
+| `12-methodology.png` | 1440×3999 | Full method reference |
 | `13-dashboard-dark.png` | 1440×900 | Dark theme, top of dashboard |
 | `14-rotation-dark.png` | 1440×900 | Dark theme, rotation map and controls |
 | `15-dashboard-mobile.png` | 390×844 | Mobile layout; scroll width equals client width |
@@ -276,3 +276,81 @@ node scripts/verification/firefox-primary.cjs
 node scripts/verification/firefox-supplemental.cjs
 node scripts/verification/chrome-smoke.cjs
 ```
+
+---
+
+## 9. Final release audit (2026-10-22)
+
+**Commit under audit:** `869a9e335afe278540c6813366d8410256bfc2f0` plus the documentation/screenshot
+updates in this same audit commit.
+
+### 9.1 Commands and results
+
+| Command | Result |
+| --- | --- |
+| `cd backend && .venv/bin/python -m pytest -p no:warnings` | `64 passed in 1.44s` |
+| `cd backend && .venv/bin/ruff check app tests` | `All checks passed!` |
+| `cd frontend && npx tsc -b` | clean |
+| `cd frontend && npm run build` | succeeded, `✓ built in 3.27s` |
+| `node scripts/verification/firefox-primary.cjs` | `55 / 55` pass |
+| `node scripts/verification/firefox-supplemental.cjs` | `15 / 15` pass |
+| `node scripts/verification/firefox-extras.cjs` | `6 / 6` pass |
+| `node scripts/verification/chrome-smoke.cjs` | `36 / 36` pass |
+| `docker build -t nsi:local .` + container smoke | image built; container served `/api/health` and `/` on port 8000 |
+| Postgres 16 smoke (`DATABASE_URL=postgresql+psycopg://...`) | ingestion + 8 endpoint checks passed |
+| Final page navigation (Chrome) | 13 routes rendered, including `/no-such-page`; zero console/page errors |
+
+### 9.2 Screenshots
+
+Final gallery: `artifacts/screenshots/` (16 PNGs), captured in a fresh Chrome instance per page with the
+viewport height set before navigation. Dimensions and method are in
+[`artifacts/screenshots/README.md`](../artifacts/screenshots/README.md). All captures showed a successfully
+rendered page and zero console errors.
+
+### 9.3 Rotation verification
+
+The API was checked for all five lookbacks (`5, 10, 20, 60, 120`) across all 13 sectors:
+
+- `absolute_strength` = sector return over the selected lookback
+- `relative_strength` = sector return − NEPSE return over the same lookback
+- Quadrant boundaries: `WINNING (x>0,y>0)`, `ADVANCING (x≤0,y>0)`, `LOSING (x>0,y≤0)`,
+  `LAGGING (x≤0,y≤0)`
+- Result: **0 mismatches** out of 65 sector/window combinations. The boundary rule is also pinned by
+  12 unit tests in `tests/test_rotation.py`.
+- Hover tooltip was verified on the rotation map (Life Insurance) and includes absolute, relative, RS
+  ratio, 20-session return, volatility, market cap, turnover, advancing members, HHI and status.
+- Wheel zoom changed the rendered canvas; the `Reset zoom` control restored the exact pre-zoom hash.
+
+### 9.4 Data provenance audit
+
+| Data | Type | Status |
+| --- | --- | --- |
+| 13 sector sub-indices + NEPSE closes | Historical mirror (1997–2026) | `VERIFIED` / `INCOMPLETE` per series |
+| Security reference and daily summaries | Historical mirror | `VERIFIED` |
+| Membership and market-cap snapshot | Static snapshot (2026-10-16) | `PROVISIONAL` |
+| Fundamental reports | Mixed-period filings | `PROVISIONAL` |
+| Corporate events | None | `UNAVAILABLE` / `BLOCKED` |
+| Backtest equity curve | Illustrative replay | `ILLUSTRATIVE` |
+
+Missing observations are `null`, never zero. Historical membership is current-only and is disclosed as a
+survivorship/classification bias. No data is presented as live NEPSE data.
+
+### 9.5 Controls exercised
+
+Lookback chips, threshold sliders, bubble metric, sector visibility filter, zoom/reset, trail length,
+timeline mode, comparison presets/date inputs/modes/chips, breadth windows and deep dive, risk sector
+selection, fundamentals member selection and next-sector, data-quality re-check, command palette, theme
+toggle, mobile drawer, CSV and PNG exports.
+
+### 9.6 Sector focus
+
+Navigation and routes were checked for stock-picking pages, candlestick charts, or OHLC warehouses. None
+exist. Member data is used only for breadth, liquidity, capitalisation and concentration.
+
+### 9.7 Remaining risks
+
+- Safari/WebKit remains untested (`BLOCKED`: Playwright WebKit crashes on this host).
+- Public deployment and load testing remain `NOT-TESTED`.
+- Screen-reader/WCAG audit remains `NOT-TESTED`.
+- Touch pinch zoom remains `NOT-TESTED`.
+- Tooltips on charts other than the rotation map are implemented but not asserted mark-by-mark.
