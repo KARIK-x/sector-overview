@@ -281,8 +281,8 @@ node scripts/verification/chrome-smoke.cjs
 
 ## 9. Final release audit (2026-10-22)
 
-**Commit under audit:** `869a9e335afe278540c6813366d8410256bfc2f0` plus the documentation/screenshot
-updates in this same audit commit.
+**Commit under audit (code):** `869a9e335afe278540c6813366d8410256bfc2f0`
+**Final audit/documentation commit:** `77e1d3c06b019598b61bb41cb65e29a6c44a8ec9`
 
 ### 9.1 Commands and results
 
