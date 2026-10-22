@@ -91,6 +91,7 @@ export default function LiquidityLab() {
   const { isDark } = useTheme()
   const [sector, setSector] = useState('')
   const [horizon, setHorizon] = useState<'return_5' | 'return_20' | 'return_60'>('return_20')
+  const [turnoverPeriod, setTurnoverPeriod] = useState<5 | 21 | 63 | 252>(21)
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['liquidity-summary'],
     queryFn: () => api.liquidity() as Promise<LiquiditySummary>,
@@ -98,9 +99,47 @@ export default function LiquidityLab() {
 
   const rows = data?.rows ?? []
   const total = data?.total_turnover ?? 0
+  const totalVolume = rows.reduce((s, r) => s + (r.volume ?? 0), 0)
+  const totalSecurities = rows.reduce((s, r) => s + (r.securities ?? 0), 0)
   const hhi = rows.reduce((s, r) => s + (r.share ?? 0) ** 2, 0)
   const history = data?.history ?? []
   const names = useMemo(() => rows.map((r) => r.sector_name), [rows])
+
+  const sortedHistory = useMemo(() => [...history].sort((a, b) => String(a.date).localeCompare(String(b.date))), [history])
+  const periodTurnover = useMemo(() => {
+    const recent = sortedHistory.slice(-turnoverPeriod)
+    const prior = sortedHistory.slice(-turnoverPeriod * 2, -turnoverPeriod)
+    const addTotals = (slice: typeof history) => {
+      const totals = new Map<string, number>()
+      for (const row of slice) {
+        for (const [key, value] of Object.entries(row)) {
+          if (key === 'date' || typeof value !== 'number') continue
+          totals.set(key, (totals.get(key) ?? 0) + value)
+        }
+      }
+      return totals
+    }
+    const recentTotals = addTotals(recent)
+    const priorTotals = addTotals(prior)
+    const sectorTotals = rows.map((r) => {
+      const recentTotal = recentTotals.get(r.sector_name) ?? 0
+      const priorTotal = priorTotals.get(r.sector_name) ?? 0
+      return {
+        sector_name: r.sector_name,
+        recent: recentTotal,
+        prior: priorTotal,
+        change: priorTotal > 0 ? recentTotal / priorTotal - 1 : null,
+      }
+    }).sort((a, b) => b.recent - a.recent)
+    const totalRecent = [...recentTotals.values()].reduce((s, v) => s + v, 0)
+    const totalPrior = [...priorTotals.values()].reduce((s, v) => s + v, 0)
+    return {
+      sectorTotals,
+      totalRecent,
+      totalPrior,
+      change: totalPrior > 0 ? totalRecent / totalPrior - 1 : null,
+    }
+  }, [rows, sortedHistory, turnoverPeriod])
 
   // Turnover is heavy-tailed by two orders of magnitude, so a log x axis is the
   // honest way to show the full cross-section in one frame.
@@ -349,6 +388,54 @@ export default function LiquidityLab() {
           </Card>
 
           <Card className="mt-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow mb-1">Turnover period</div>
+                <p className="text-[11px] text-muted">Totals are sums of observed daily turnover. Periods are trading sessions, not calendar days.</p>
+              </div>
+              <Segmented
+                options={[{ value: 5, label: '5D' }, { value: 21, label: '21D' }, { value: 63, label: '63D' }, { value: 252, label: '252D' }]}
+                value={turnoverPeriod}
+                onChange={(v) => setTurnoverPeriod(v as 5 | 21 | 63 | 252)}
+                size="sm"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Period turnover" value={npr(periodTurnover.totalRecent)} sub={`${turnoverPeriod} sessions`} />
+              <Metric label="Prior period" value={npr(periodTurnover.totalPrior)} sub={`${turnoverPeriod} sessions`} />
+              <Metric label="Change" value={signedPct(periodTurnover.change)} tone={periodTurnover.change && periodTurnover.change > 0 ? 'pos' : 'neg'} sub="recent vs prior" />
+            </div>
+            <div className="mt-4 table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Sector</th>
+                    <th className="text-right">Period turnover</th>
+                    <th className="text-right">Prior period</th>
+                    <th className="text-right">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodTurnover.sectorTotals.slice(0, 8).map((r) => (
+                    <tr key={r.sector_name}>
+                      <td>{r.sector_name}</td>
+                      <td className="num text-right">{npr(r.recent)}</td>
+                      <td className="num text-right text-muted">{npr(r.prior)}</td>
+                      <td className={cn('num text-right', toneClass(r.change))}>{signedPct(r.change)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-raised/60 font-medium">
+                    <td>Total (observed sectors)</td>
+                    <td className="num text-right">{npr(periodTurnover.totalRecent)}</td>
+                    <td className="num text-right text-muted">{npr(periodTurnover.totalPrior)}</td>
+                    <td className={cn('num text-right', toneClass(periodTurnover.change))}>{signedPct(periodTurnover.change)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card className="mt-4">
             <CardHeader
               eyebrow="Concentration"
               title="Sector turnover table"
@@ -411,6 +498,22 @@ export default function LiquidityLab() {
                     </tr>
                   ))}
                 </tbody>
+                  <tr className="bg-raised/60 font-medium">
+                    <td className="num text-faint">{rows.length + 1}</td>
+                    <td>Total (observed sectors)</td>
+                    <td className="num text-right">{npr(total)}</td>
+                    <td className="num text-right">100.0%</td>
+                    <td className="num text-right text-muted">{compact(totalVolume)}</td>
+                    <td className="num text-right">{totalSecurities}</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td>
+                      <div className="h-2 overflow-hidden rounded-sm bg-line/60">
+                        <div className="h-full rounded-sm bg-accent" style={{ width: '100%' }} />
+                      </div>
+                    </td>
+                  </tr>
               </table>
             </div>
           </Card>

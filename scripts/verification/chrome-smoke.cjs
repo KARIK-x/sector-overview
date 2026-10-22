@@ -80,7 +80,7 @@ async function dl(page, loc) {
       if (x.s !== x.c) throw new Error(JSON.stringify(x))
     })
     await page.getByRole('button', { name: 'Open menu' }).click()
-    await page.getByRole('link', { name: 'Rotation Lab' }).click()
+    await page.getByRole('link', { name: 'Rotation Lab', exact: true }).first().click()
     await page.waitForTimeout(700)
     await check('chrome mobile drawer navigates', async () => { if (!/\/rotation$/.test(page.url())) throw new Error(page.url()) })
     await check('chrome mobile no errors', async () => { if (errors.length) throw new Error(errors.join(' | ')) })

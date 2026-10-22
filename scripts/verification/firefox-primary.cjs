@@ -348,7 +348,7 @@ async function downloadOf(page, locator) {
     await check('mobile drawer opens', async () => {
       if (!(await page.getByRole('button', { name: 'Close menu' }).isVisible())) throw new Error('no close button')
     })
-    await page.getByRole('link', { name: 'Rotation Lab' }).click()
+    await page.getByRole('link', { name: 'Rotation Lab', exact: true }).first().click()
     await page.waitForTimeout(900)
     await check('mobile drawer navigates', async () => {
       if (!/\/rotation$/.test(page.url())) throw new Error(page.url())

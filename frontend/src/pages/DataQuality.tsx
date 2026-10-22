@@ -230,6 +230,15 @@ export default function DataQuality() {
           </div>
 
           <Card className="mt-4">
+            <InfoNote>
+              The application analyses the 13 NEPSE sector sub-indices that have verified index history.
+              NEPSE’s daily sector summary also reports preference shares, corporate debentures and promoter
+              shares; those are turnover categories, not sector sub-indices, and are excluded from rotation
+              and relative-strength calculations because no sub-index history is available.
+            </InfoNote>
+          </Card>
+
+          <Card className="mt-4">
             <CardHeader eyebrow="Provenance" title="Source register" subtitle="Every dataset has a named origin, role and status." />
             <div className="table-wrap">
               <table className="data-table">

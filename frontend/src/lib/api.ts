@@ -91,6 +91,8 @@ export interface RotationPayload {
   absolute_threshold: number
   relative_threshold: number
   latest_date: string | null
+  market_return?: number | null
+  market_returns?: Record<string, number | null>
   rows: RotationRow[]
   transitions: TransitionEvent[]
   axes: { x: string; y: string }
@@ -245,6 +247,10 @@ export interface RiskRow {
   code: string
   name: string
   volatility: number | null
+  volatility_5?: number | null
+  volatility_21?: number | null
+  volatility_63?: number | null
+  volatility_252?: number | null
   max_drawdown: number | null
   current_drawdown: number | null
   beta: number | null
@@ -266,6 +272,7 @@ export interface RiskSummary {
   reason?: string
   latest_date?: string
   rows?: RiskRow[]
+  market?: RiskRow
   correlation_matrix?: CorrelationMatrix | null
   notes?: string[]
 }

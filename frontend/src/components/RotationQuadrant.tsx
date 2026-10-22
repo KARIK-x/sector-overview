@@ -80,11 +80,12 @@ export function RotationQuadrant({
             name: `${row?.name ?? code} trail`,
             data: points.map((t) => ({
               value: [t.absolute_strength, t.relative_strength],
+              code,
               date: t.date,
               quadrant: t.quadrant,
             })),
             symbol: 'none',
-            silent: !isSelected,
+            silent: false,
             animation: false,
             lineStyle: {
               width: isSelected ? 2.4 : watched.includes(code) ? 1.6 : 1,
@@ -357,8 +358,9 @@ export function RotationQuadrant({
   const onEvents = useMemo(
     () => ({
       click: (params: unknown) => {
-        const p = params as { data?: { meta?: RotationRow } }
-        if (p.data?.meta && onSelect) onSelect(p.data.meta.code)
+        const p = params as { data?: { meta?: RotationRow; code?: string } }
+        const code = p.data?.meta?.code ?? p.data?.code
+        if (code && onSelect) onSelect(code)
       },
     }),
     [onSelect],

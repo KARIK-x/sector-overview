@@ -482,7 +482,13 @@ export default function RotationLab() {
 
       {data && !isLoading && (
         <>
-          <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+          <InfoNote>
+            Lookback is a number of trading sessions, not calendar days. The chart plots cumulative returns,
+            not index levels: x is the sector’s own return and y is its excess return versus NEPSE. Bubble
+            size is a context metric (market cap, turnover, volatility or breadth) and never moves a sector
+            between quadrants.
+          </InfoNote>
+          <div className="mt-4 grid gap-4 xl:grid-cols-[1.6fr_1fr]">
             <Card>
               <CardHeader
                 eyebrow={`Absolute vs relative · ${window} sessions`}
@@ -652,6 +658,19 @@ export default function RotationLab() {
                       <td><QuadrantBadge quadrant={r.quadrant} /></td>
                     </tr>
                   ))}
+                  <tr className="bg-raised/60 font-medium">
+                    <td>NEPSE (market)</td>
+                    <td className="num text-right">{signedPct(data.market_return)}</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td className="num text-right">1.0000</td>
+                    <td className="num text-right">{signedPct(data.market_returns?.r20)}</td>
+                    <td className="num text-right">{signedPct(data.market_returns?.r60)}</td>
+                    <td className="num text-right">{signedPct(data.market_returns?.r120)}</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td className="num text-right text-muted">—</td>
+                    <td><span className="chip border-line bg-raised text-muted">Benchmark</span></td>
+                  </tr>
                 </tbody>
               </table>
             </div>

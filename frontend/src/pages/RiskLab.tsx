@@ -6,7 +6,7 @@ import { ArrowUpRight, Download, ShieldCheck } from 'lucide-react'
 import { api } from '../lib/api'
 import type { CorrelationMatrix, RiskSummary } from '../lib/api'
 import { Chart } from '../components/Chart'
-import { Card, CardHeader, ErrorState, InfoNote, Loading, Metric, PageHeader, StatusBadge } from '../components/ui'
+import { Card, CardHeader, ErrorState, InfoNote, Loading, Metric, PageHeader, Segmented, StatusBadge } from '../components/ui'
 import { useTheme } from '../lib/useTheme'
 import { axisStyle, baseOption, heatColor, palette } from '../lib/chart'
 import { cn, dateLabel, dateTick, needsYear, num, pct, signedPct, toneClass } from '../lib/format'
@@ -186,6 +186,7 @@ function DrawdownPanel({ code }: { code: string }) {
 export default function RiskLab() {
   const { isDark } = useTheme()
   const [code, setCode] = useState('BANKING')
+  const [volHorizon, setVolHorizon] = useState<'5' | '21' | '63' | '252'>('252')
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['risk-summary'],
     queryFn: () => api.risk() as Promise<RiskSummary>,
@@ -196,6 +197,9 @@ export default function RiskLab() {
   })
 
   const rows = useMemo(() => data?.rows ?? [], [data])
+  const volKey = volHorizon === '252' ? 'volatility' : `volatility_${volHorizon}`
+  const rowVol = (r: (typeof rows)[number]) => (r as unknown as Record<string, number | null | undefined>)[volKey] ?? null
+  const marketVol = data?.market ? (data.market as unknown as Record<string, number | null | undefined>)[volKey] ?? data.market.volatility : null
   const retMap = useMemo(() => Object.fromEntries((rotation?.rows ?? []).map((r) => [r.code, r.return_120])), [rotation])
 
   const scatterOption = useMemo(() => {
@@ -400,9 +404,9 @@ export default function RiskLab() {
     } as unknown as EChartsOption
   }, [data, isDark])
 
-  const highestVol = [...rows].sort((a, b) => (b.volatility ?? 0) - (a.volatility ?? 0))[0]
+  const highestVol = [...rows].sort((a, b) => (rowVol(b) ?? 0) - (rowVol(a) ?? 0))[0]
   const deepest = [...rows].sort((a, b) => (a.max_drawdown ?? 0) - (b.max_drawdown ?? 0))[0]
-  const lowestVol = [...rows].sort((a, b) => (a.volatility ?? 9) - (b.volatility ?? 9))[0]
+  const lowestVol = [...rows].sort((a, b) => (rowVol(a) ?? 9) - (rowVol(b) ?? 9))[0]
 
   return (
     <div>
@@ -419,10 +423,10 @@ export default function RiskLab() {
       {data && data.available && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card><Metric label="Highest volatility" value={pct(highestVol?.volatility)} sub={highestVol?.name} tone="neg" /></Card>
-            <Card><Metric label="Lowest volatility" value={pct(lowestVol?.volatility)} sub={lowestVol?.name} tone="pos" /></Card>
+            <Card><Metric label="Highest volatility" value={pct(rowVol(highestVol))} sub={highestVol?.name} tone="neg" /></Card>
+            <Card><Metric label="Lowest volatility" value={pct(rowVol(lowestVol))} sub={lowestVol?.name} tone="pos" /></Card>
             <Card><Metric label="Deepest drawdown" value={signedPct(deepest?.max_drawdown)} sub={deepest?.name} tone="neg" /></Card>
-            <Card><Metric label="Sectors measured" value={rows.length} sub="252-session window" /></Card>
+            <Card><Metric label="Sectors measured" value={rows.length} sub={`${volHorizon}-session volatility`} /></Card>
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
@@ -474,6 +478,18 @@ export default function RiskLab() {
           </Card>
 
           <Card className="mt-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="eyebrow mb-1">Volatility horizon</div>
+                <p className="text-[11px] text-muted">Annualised volatility is computed from daily returns over the selected horizon.</p>
+              </div>
+              <Segmented
+                options={[{ value: '5', label: '5D' }, { value: '21', label: '21D' }, { value: '63', label: '63D' }, { value: '252', label: '252D' }]}
+                value={volHorizon}
+                onChange={(v) => setVolHorizon(v as '5' | '21' | '63' | '252')}
+                size="sm"
+              />
+            </div>
             <CardHeader
               eyebrow="Risk table"
               title="Cross-sectional risk metrics"
@@ -488,7 +504,7 @@ export default function RiskLab() {
                       [...rows]
                         .sort((a, b) => (a.volatility ?? 0) - (b.volatility ?? 0))
                         .map((r) => [
-                          r.name, r.volatility, r.beta, r.correlation, r.max_drawdown,
+                          r.name, rowVol(r), r.beta, r.correlation, r.max_drawdown,
                           r.current_drawdown, r.var_95, r.cvar_95, r.observations,
                         ]),
                     )
@@ -513,12 +529,12 @@ export default function RiskLab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...rows].sort((a, b) => (a.volatility ?? 0) - (b.volatility ?? 0)).map((r) => (
+                  {[...rows].sort((a, b) => (rowVol(a) ?? 0) - (rowVol(b) ?? 0)).map((r) => (
                     <tr key={r.code}>
                       <td>
                         <button className="text-left hover:text-accent" onClick={() => setCode(r.code)}>{r.name}</button>
                       </td>
-                      <td className="num text-right">{pct(r.volatility)}</td>
+                      <td className="num text-right">{pct(rowVol(r))}</td>
                       <td className={cn('num text-right', (r.beta ?? 0) > 1 ? 'warn' : '')}>{num(r.beta)}</td>
                       <td className="num text-right text-muted">{num(r.correlation)}</td>
                       <td className="num text-right neg">{signedPct(r.max_drawdown)}</td>
@@ -527,6 +543,18 @@ export default function RiskLab() {
                       <td className="num text-right">{signedPct(r.cvar_95)}</td>
                     </tr>
                   ))}
+                  {data?.market && (
+                    <tr className="bg-raised/60 font-medium">
+                      <td>{data.market.name}</td>
+                      <td className="num text-right">{pct(marketVol)}</td>
+                      <td className="num text-right">1.00</td>
+                      <td className="num text-right text-muted">1.00</td>
+                      <td className="num text-right neg">{signedPct(data.market.max_drawdown)}</td>
+                      <td className={cn('num text-right', toneClass(data.market.current_drawdown))}>{signedPct(data.market.current_drawdown)}</td>
+                      <td className="num text-right">{signedPct(data.market.var_95)}</td>
+                      <td className="num text-right">{signedPct(data.market.cvar_95)}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

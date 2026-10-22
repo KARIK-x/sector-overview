@@ -317,6 +317,8 @@ def rotation_payload(session: Session, window: int = 20, abs_thr: float = 0.0, r
         "absolute_threshold": abs_thr,
         "relative_threshold": rel_thr,
         "latest_date": _date_str(_latest(frame)),
+        "market_return": _ret(frame[NEPSE_INDEX_CODE], window) if NEPSE_INDEX_CODE in frame else None,
+        "market_returns": {f"r{h}": _ret(frame[NEPSE_INDEX_CODE], h) for h in (20, 60, 120)} if NEPSE_INDEX_CODE in frame else {},
         "context_date": _date_str(context_date),
         "rows": rows,
         "transitions": transitions,
@@ -568,6 +570,13 @@ def heatmap_payload(session: Session):
             row[f"r{h}"] = _ret(series, h) if len(series) > h else None
         row["latest_date"] = _date_str(pair.index.max()) if not pair.empty else None
         rows.append(row)
+    if NEPSE_INDEX_CODE in frame.columns:
+        nepse_series = frame[NEPSE_INDEX_CODE]
+        nepse_row = {"code": "NEPSE", "name": "NEPSE (market)"}
+        for h in HORIZONS:
+            nepse_row[f"r{h}"] = _ret(nepse_series, h) if len(nepse_series) > h else None
+        nepse_row["latest_date"] = _date_str(_latest(frame))
+        rows.append(nepse_row)
     return {"horizons": list(HORIZONS), "rows": rows, "latest_date": _date_str(_latest(frame))}
 
 
@@ -873,6 +882,10 @@ def risk_summary(session: Session) -> dict:
                 "code": code,
                 "name": SECTOR_BY_CODE[code].name,
                 "volatility": annualized_volatility(s_ret[-252:]),
+                "volatility_5": annualized_volatility(s_ret[-5:]),
+                "volatility_21": annualized_volatility(s_ret[-21:]),
+                "volatility_63": annualized_volatility(s_ret[-63:]),
+                "volatility_252": annualized_volatility(s_ret[-252:]),
                 "max_drawdown": max_drawdown(values),
                 "current_drawdown": current_drawdown(values),
                 "beta": beta(s_ret[-252:], m_ret[-252:]),
@@ -882,6 +895,25 @@ def risk_summary(session: Session) -> dict:
                 "observations": len(pair),
             }
         )
+    market_values = frame[NEPSE_INDEX_CODE].tolist() if NEPSE_INDEX_CODE in frame.columns else []
+    market_returns = daily_returns(market_values)
+    market = {
+        "code": "NEPSE",
+        "name": "NEPSE (market)",
+        "volatility": annualized_volatility(market_returns[-252:]),
+        "volatility_5": annualized_volatility(market_returns[-5:]),
+        "volatility_21": annualized_volatility(market_returns[-21:]),
+        "volatility_63": annualized_volatility(market_returns[-63:]),
+        "volatility_252": annualized_volatility(market_returns[-252:]),
+        "max_drawdown": max_drawdown(market_values),
+        "current_drawdown": current_drawdown(market_values),
+        "beta": 1.0,
+        "correlation": 1.0,
+        "var_95": var_historical(market_returns[-252:]),
+        "cvar_95": cvar_historical(market_returns[-252:]),
+        "observations": len(market_values),
+    }
+
     matrix = None
     codes = [code for code in SECTOR_BY_CODE if sector_symbol(code) in frame.columns]
     matrix_columns = [sector_symbol(code) for code in codes] + [NEPSE_INDEX_CODE]
@@ -902,6 +934,7 @@ def risk_summary(session: Session) -> dict:
         "available": True,
         "latest_date": _date_str(_latest(frame)),
         "rows": rows,
+        "market": market,
         "correlation_matrix": matrix,
         "notes": [
             "Correlations use pairwise-complete daily returns over the last 252 sessions.",

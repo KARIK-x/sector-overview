@@ -404,6 +404,63 @@ function ContributionCard({ data }: { data: DashboardPayload }) {
   )
 }
 
+function PeriodWinnersCard() {
+  const q5 = useQuery({ queryKey: ['rotation', 5, 0, 0], queryFn: () => api.rotation(5, 0, 0) })
+  const q21 = useQuery({ queryKey: ['rotation', 21, 0, 0], queryFn: () => api.rotation(21, 0, 0) })
+  const q63 = useQuery({ queryKey: ['rotation', 63, 0, 0], queryFn: () => api.rotation(63, 0, 0) })
+  const q252 = useQuery({ queryKey: ['rotation', 252, 0, 0], queryFn: () => api.rotation(252, 0, 0) })
+  const periods = [
+    { label: '5 sessions (~1 week)', data: q5.data },
+    { label: '21 sessions (~1 month)', data: q21.data },
+    { label: '63 sessions (~3 months)', data: q63.data },
+    { label: '252 sessions (~12 months)', data: q252.data },
+  ]
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Market horizons"
+        title="Who is winning over each period"
+        subtitle="Leader and laggard by absolute sector return. Returns are trading-session cumulative returns, not calendar-day returns."
+        actions={<Link to="/rotation" className="text-[11px] text-accent hover:underline">Rotation lab</Link>}
+      />
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Leader</th>
+              <th className="text-right">Leader return</th>
+              <th>Laggard</th>
+              <th className="text-right">Laggard return</th>
+              <th className="text-right">NEPSE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((p) => {
+              const rows = p.data?.rows ?? []
+              const leader = [...rows].sort((a, b) => (b.absolute_strength ?? -Infinity) - (a.absolute_strength ?? -Infinity))[0]
+              const laggard = [...rows].sort((a, b) => (a.absolute_strength ?? Infinity) - (b.absolute_strength ?? Infinity))[0]
+              return (
+                <tr key={p.label}>
+                  <td className="text-[11px]">{p.label}</td>
+                  <td>{leader?.name ?? '—'}</td>
+                  <td className={cn('num text-right', toneClass(leader?.absolute_strength))}>{signedPct(leader?.absolute_strength)}</td>
+                  <td>{laggard?.name ?? '—'}</td>
+                  <td className={cn('num text-right', toneClass(laggard?.absolute_strength))}>{signedPct(laggard?.absolute_strength)}</td>
+                  <td className={cn('num text-right', toneClass(p.data?.market_return))}>{signedPct(p.data?.market_return)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-[10px] text-muted">
+        NEPSE is shown as the market benchmark. Sector percentages are not summed into a total market return.
+      </p>
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -452,6 +509,10 @@ export default function Dashboard() {
       <SessionBrief data={data} />
 
       <div className="mt-4">
+        <PeriodWinnersCard />
+      </div>
+
+      <div className="mt-4">
         <Card>
           <CardHeader
             eyebrow="Rotation map · 20 sessions"
@@ -477,7 +538,7 @@ export default function Dashboard() {
             subtitle="Cumulative index return by trading-session lookback. Click a cell to open the sector."
             actions={<Link to="/sectors" className="text-[11px] text-accent hover:underline">Explore</Link>}
           />
-          <SectorHeatmap data={data.heatmap} height={440} onSelect={(code) => navigate(`/sectors?code=${code}`)} />
+          <SectorHeatmap data={data.heatmap} height={440} onSelect={(code) => { if (code !== 'NEPSE') navigate(`/sectors?code=${code}`) }} />
         </Card>
       </div>
 

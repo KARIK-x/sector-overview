@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download } from 'lucide-react'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
 import type { EChartsOption } from 'echarts'
@@ -26,6 +26,23 @@ export function Chart({
   const wrap = useRef<HTMLDivElement>(null)
   const [exported, setExported] = useState(false)
 
+  const zoomedOption = useMemo(() => {
+    const base = option as EChartsOption & { dataZoom?: unknown }
+    if (base.dataZoom) return option
+    return {
+      ...option,
+      dataZoom: [
+        {
+          type: 'inside',
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+        },
+      ],
+    } as EChartsOption
+  }, [option])
+
   useEffect(() => {
     const t = window.setTimeout(() => ref.current?.getEchartsInstance().resize(), 120)
     return () => window.clearTimeout(t)
@@ -37,7 +54,7 @@ export function Chart({
         <ReactEChartsCore
           echarts={echarts}
           ref={ref}
-          option={option}
+          option={zoomedOption}
           notMerge
           lazyUpdate
           style={{ height: '100%', width: '100%' }}

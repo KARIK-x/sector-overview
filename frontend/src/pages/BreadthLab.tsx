@@ -404,6 +404,10 @@ export default function BreadthLab() {
                     )
                   })}
               </div>
+              <div className="mt-3 flex items-center justify-between border-t pt-2 text-[11px] font-medium">
+                <span>Total (classified sectors)</span>
+                <span className={cn('num', toneClass(totals.adv - totals.dec))}>{totals.adv - totals.dec} net advances</span>
+              </div>
               {data.method && <InfoNote>{data.method}</InfoNote>}
             </Card>
           </div>

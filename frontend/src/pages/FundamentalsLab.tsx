@@ -277,6 +277,29 @@ export default function FundamentalsLab() {
                       <td className={cn('num text-right', (r.negative_earnings_symbols ?? 0) > 0 ? 'warn' : 'text-muted')}>{r.negative_earnings_symbols ?? 0}</td>
                     </tr>
                   ))}
+                  {(() => {
+                    const totalProfit = rows.reduce((s, r) => s + (r.aggregate_profit ?? 0), 0)
+                    const totalMarketCap = rows.reduce((s, r) => s + (r.aggregate_market_cap ?? 0), 0)
+                    const totalEquity = rows.reduce((s, r) => s + (r.aggregate_equity ?? 0), 0)
+                    const totalSymbols = rows.reduce((s, r) => s + (r.symbols_total ?? 0), 0)
+                    const totalCovered = rows.reduce((s, r) => s + (r.symbols_with_reports ?? 0), 0)
+                    const totalLoss = rows.reduce((s, r) => s + (r.negative_earnings_symbols ?? 0), 0)
+                    const totalPe = totalProfit > 0 && totalMarketCap > 0 ? totalMarketCap / totalProfit : null
+                    const totalRoe = totalEquity > 0 ? totalProfit / totalEquity : null
+                    return (
+                      <tr className="bg-raised/60 font-medium">
+                        <td>Total ({rows.length} sectors)</td>
+                        <td className="num text-right">{pct(totalSymbols ? totalCovered / totalSymbols : null, 0)}</td>
+                        <td className="num text-right">{npr(totalProfit)}</td>
+                        <td className="num text-right text-muted">{npr(totalMarketCap)}</td>
+                        <td className="num text-right">{num(totalPe, 1)}</td>
+                        <td className="num text-right text-muted">—</td>
+                        <td className="num text-right">—</td>
+                        <td className="num text-right">{pct(totalRoe)}</td>
+                        <td className={cn('num text-right', totalLoss > 0 ? 'warn' : 'text-muted')}>{totalLoss}</td>
+                      </tr>
+                    )
+                  })()}
                 </tbody>
               </table>
             </div>
