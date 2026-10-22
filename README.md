@@ -8,7 +8,7 @@ sector level — and shows its evidence for every number.
 > charting and no OHLC warehouse. Minimal per-company daily summaries are stored only to compute sector
 > breadth, liquidity, concentration and capitalisation.
 
-![Dashboard](docs/screenshots/01-dashboard.png)
+<img src="artifacts/screenshots/01-dashboard.png" alt="Dashboard" width="840">
 
 ---
 
@@ -19,45 +19,46 @@ sector level — and shows its evidence for every number.
 | **Dashboard** | What is the market doing by sector, right now? |
 | **Sector Explorer** | Everything the app knows about one sector, with the gaps labelled. |
 | **Rotation Lab** | Which sectors are winning, advancing, losing or lagging on two axes? |
+| **Sector Comparison** | How have selected sectors and NEPSE travelled over the same window? |
 | **Breadth Lab** | Is the move broad or narrow, and is participation improving? |
-| **Liquidity Lab** | Where is trading value concentrated, and how concentrated is it inside a sector? |
-| **Risk Lab** | What shape is the path — volatility, beta, drawdown, historical VaR? |
-| **Fundamentals Lab** | What do the latest verified filings say in aggregate, and what is missing? |
-| **Events & Research** | Corporate events: an explicit coverage gap, not an invented calendar. |
-| **Quantitative Research Lab** | Factor scores, quadrant persistence and an illustrative rotation backtest. |
-| **Data Quality Center** | Coverage, freshness, ingestion receipts and open gaps. |
-| **Methodology** | Formulas, axis contracts and the status vocabulary. |
+| **Liquidity Lab** | Where is trading value concentrated, and how concentrated is it inside sectors? |
+| **Risk Lab** | Which sectors are volatile, correlated or deep in drawdown? |
+| **Fundamentals Lab** | What do the latest verified filings imply, and what is missing? |
+| **Quantitative Research Lab** | What do a transparent factor score, transition matrix and illustrative backtest say? |
+| **Data Quality Center** | What is stored, how complete is it, and where did it come from? |
+| **Events & Research** | What would a corporate-events feed require, and why is it unavailable? |
+| **Methodology** | What is every formula, window and status label? |
 
-All eleven pages are implemented and were exercised end-to-end in a real browser; screenshots in
-`docs/screenshots/` are captures of the running application, not mockups.
+Twelve content pages plus a 404 route. All charts are Apache ECharts; all numbers come from the
+FastAPI backend, never from hard-coded UI values. CSV and PNG exports are client-side.
 
 ---
 
 ## Architecture
 
 ```
-frontend/   React 18 + TypeScript + Vite + Tailwind + Apache ECharts
-   │  typed fetch client, React Query, hash-free SPA routing
+Browser
+   │  React 18 + TypeScript + Vite + Tailwind, React Query, ECharts
    ▼
-backend/    FastAPI + SQLAlchemy 2 + pandas/numpy/scipy
-   │  analytics services → calculations package
+FastAPI
+   │  read-only JSON under /api/*, 90 s in-process cache, gzip
    ▼
-SQLite (default)  or  PostgreSQL (DATABASE_URL)
+SQLAlchemy 2 ── SQLite (default) or PostgreSQL (DATABASE_URL)
+   │
+   └─ calculations package: returns, rotation, breadth, concentration, risk, fundamentals, factors
 ```
 
 The application is **fully independent**. It does not import, call or share infrastructure with any
 other trading application. No private files, databases, environment variables or analytics engines were
 copied in.
 
-* **One service in production.** The FastAPI app serves `/api/*` and, when `frontend/dist` exists, the
-  built SPA (including a catch-all route for client-side navigation).
+* **One service in production.** FastAPI serves `/api/*` and the built SPA (including the catch-all route).
 * **Read-only API.** Every endpoint is `GET`; ingestion is a separate CLI process.
-* **Deterministic calculations.** All maths lives in `backend/app/calculations/` and is unit-tested
-  independently of HTTP.
-* **Honest serialisation.** Non-finite floats are converted to `null` by a response class, so the API can
-  never emit invalid JSON (`NaN`, `Infinity`).
-* **Cheap to run.** A 90 s in-process cache and gzip keep warm payloads at 1–11 ms and the dashboard at
-  about 10 kB on the wire; no Redis, no worker, no separate frontend host.
+* **Deterministic calculations.** Maths lives in `backend/app/calculations/`, unit-tested independently
+  of HTTP and the database.
+* **Honest serialisation.** Non-finite floats become `null`; the API cannot emit `NaN`/`Infinity`.
+* **Cheap to run.** A 90 s in-process cache and gzip keep warm payloads small; no Redis, worker or
+  separate frontend host.
 
 ### Layout
 
@@ -68,13 +69,14 @@ backend/app/
   ingestion/      verified source URLs, HTTP cache, pipeline
   services/       analytics payload builders + short TTL cache
   models.py       sectors, index observations, securities, memberships, daily summaries, filings
-backend/tests/    58 tests (unit + API contract + serialiser)
+backend/tests/    64 tests (unit + API contract + serialiser)
 frontend/src/
-  pages/          11 pages + 404
-  components/     Chart, RotationQuadrant, SectorHeatmap, Layout, UI primitives
-  lib/            API client and types, formatters, chart theme, navigation, theme store
-docs/             project documentation and real screenshots
-scripts/ingest.py ingestion CLI
+  pages/          12 pages + 404
+  components/     Chart, RotationQuadrant, SectorHeatmap, RankTimeline, Layout, UI primitives
+  lib/            API client/types, formatters, chart theme, navigation, theme store, exports
+docs/             project, data, methodology, testing, status, visual/functional audits
+scripts/          ingestion CLI + Playwright verification harnesses
+artifacts/screenshots/  16 final evidence images
 Dockerfile        single-image build (frontend build + Python runtime)
 ```
 
@@ -107,14 +109,14 @@ backend/.venv/bin/python scripts/ingest.py all
 Sub-commands: `sectors`, `indices`, `securities`, `summaries`, `fundamentals`, `all`, `init`.
 `--no-summaries` skips the slow per-security pass. Ingestion caches raw responses under
 `backend/data/raw/` and is idempotent: unique constraints on `(index_code, trade_date)` and
-`(symbol, trade_date)`, and the fundamentals snapshot is replaced atomically so amended filings
-refresh rather than duplicate.
+`(symbol, trade_date)`, and the fundamentals snapshot is replaced atomically so amended filings refresh
+rather than duplicate.
 
 ### Production build
 
 ```bash
 cd frontend && npm run build     # writes frontend/dist
-cd ../backend && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd ../backend && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 The backend serves the built SPA at `/` and the API at `/api/*`.
@@ -125,18 +127,20 @@ The backend serves the built SPA at `/` and the API at `/api/*`.
 
 | Dataset | Source | Status |
 | --- | --- | --- |
-| NEPSE index + 13 sub-indices, 1997→2026 | `menaceXnadin/nepse-historical-market-data-csv` (public CSV mirror) | VERIFIED |
+| NEPSE index + 13 sub-indices, 1997→2026 | `menaceXnadin/nepse-historical-market-data-csv` (public CSV mirror) | VERIFIED / INCOMPLETE per series |
 | Sector metadata, current membership, market-cap snapshot | YONEPSE static JSON | VERIFIED / PROVISIONAL |
 | Minimal security daily summaries (close, change, volume, turnover) | `binayabaral/nepal-market-data` (MIT) | VERIFIED |
 | Reported EPS / P/E / paid-up capital / profit / net worth | YONEPSE `financials.json` | PROVISIONAL |
+| Corporate events | — | `UNAVAILABLE`; not fabricated |
 
 Current warehouse: **13 sectors**, **41,509 index observations** (34,896 sector + 6,613 NEPSE),
-**433,817 daily summaries** across **285 symbols**, **467 securities** (**331 classified**),
-**4,840 fundamental reports** across **307 symbols**. Latest index date: **2026-10-16**.
+**433,817 daily summaries** across **285 symbols**, **467 securities** (**331 classified**, 343 with a
+market-cap snapshot), **4,840 fundamental reports** across **307 symbols**. Latest index date:
+**2026-10-16**.
 
 The official NEPSE API requires authentication and returned HTTP 401 during the audit. It was not
-bypassed. Consequences and every other gap are listed in [KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md)
-and surfaced inside the app.
+bypassed. Consequences and every other gap are in [KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) and
+surfaced inside the app.
 
 > Historical sector membership is not published by the available sources. Current membership is applied
 > to history and the app says so wherever breadth is derived.
@@ -155,21 +159,36 @@ The quadrants are fixed and tested:
 | **Lagging** (bottom-left) | `x ≤ 0` | `y ≤ 0` |
 
 Lookbacks: 5, 10, 20, 60, 120 sessions; default 20. Thresholds are configurable and default to zero.
+Bubble size can encode market cap, turnover, volatility or breadth, but never moves a sector between
+quadrants. Trails are true replays of the metric, not interpolations.
+
+Worked example, 2026-10-16: Commercial Banks returned **+6.4629 %** over 20 sessions; NEPSE returned
+**+0.8326 %**; relative strength **+5.6304 %**; RS ratio **1.0558** → **Winning**. Census: 4 Winning,
+0 Advancing, 0 Losing, 9 Lagging.
 
 ---
 
 ## Tests and checks
 
 ```bash
-cd backend  && .venv/bin/python -m pytest -q        # 58 passed
-cd backend  && .venv/bin/ruff check app tests       # clean
-cd frontend && npx tsc -b                          # type-check
-cd frontend && npm run build                       # production build
+cd backend  && .venv/bin/python -m pytest -p no:warnings   # 64 passed
+cd backend  && .venv/bin/ruff check app tests              # clean
+cd frontend && npx tsc -b                                  # type-check
+cd frontend && npm run build                               # production build
 ```
 
-The browser pass is documented in [TESTING_REPORT.md](docs/TESTING_REPORT.md): all 12 routes rendered
-with **zero console errors**, and interactions (lookback changes, theme toggle, command palette,
-sector switches) were exercised against the running build.
+Browser evidence (Playwright, production build):
+
+* **Firefox:** 55 primary + 15 supplemental + 6 extras = **76 checks**, all pass, zero console errors.
+* **Chrome:** **36 checks**, all pass, zero console errors.
+* Real CSV/PNG downloads inspected: non-empty files, expected headers, PNG magic bytes and dimensions.
+* **WebKit/Safari:** `BLOCKED` — Playwright's WebKit build crashes on this host.
+* 16 final screenshots in [`artifacts/screenshots/`](artifacts/screenshots/), captured in Firefox with
+  pre-sized viewports (no stitched full-page captures); dimensions and method are in the
+  [screenshot index](artifacts/screenshots/README.md).
+
+Details and limitations: [TESTING_REPORT.md](docs/TESTING_REPORT.md). The committed harnesses live in
+[`scripts/verification/`](scripts/verification/).
 
 ---
 
@@ -177,13 +196,22 @@ sector switches) were exercised against the running build.
 
 * [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) — scope, priorities, decisions, milestones
 * [DATA_SOURCE_AUDIT.md](docs/DATA_SOURCE_AUDIT.md) — what each source provides, licensing, failures
-* [DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) — tables, fields, units, keys
+* [DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) — tables, fields, units, keys, API
 * [ANALYTICS_METHODOLOGY.md](docs/ANALYTICS_METHODOLOGY.md) — every formula and its caveats
-* [VISUALIZATION_CATALOG.md](docs/VISUALIZATION_CATALOG.md) — every chart, its encoding and purpose
-* [TESTING_REPORT.md](docs/TESTING_REPORT.md) — automated and browser evidence
+* [VISUALIZATION_CATALOG.md](docs/VISUALIZATION_CATALOG.md) — all 27 chart surfaces and encodings
+* [VISUALIZATION_AUDIT.md](docs/VISUALIZATION_AUDIT.md) — page-by-page visual review and fixes
+* [FUNCTIONALITY_AUDIT.md](docs/FUNCTIONALITY_AUDIT.md) — requirement-by-requirement trace
+* [TESTING_REPORT.md](docs/TESTING_REPORT.md) — automated, browser, export and screenshot evidence
 * [DEPLOYMENT.md](docs/DEPLOYMENT.md) — Docker, free-tier hosting options, database strategy
 * [KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) — gaps, refused shortcuts, data-quality notes
-* [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — status of every surface
+* [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — status of every page, endpoint and feature
+
+### Screenshot gallery
+
+| | |
+| --- | --- |
+| <img src="artifacts/screenshots/02-rotation-lab.png" alt="Rotation Lab" width="390"> | <img src="artifacts/screenshots/06-risk-lab.png" alt="Risk Lab" width="390"> |
+| <img src="artifacts/screenshots/07-fundamentals-lab.png" alt="Fundamentals Lab" width="390"> | <img src="artifacts/screenshots/10-data-quality.png" alt="Data Quality" width="390"> |
 
 ---
 
@@ -192,7 +220,9 @@ sector switches) were exercised against the running build.
 `IMPLEMENTED` · `TESTED-PASS` · `TESTED-FAIL` · `NOT-TESTED` · `BLOCKED`
 
 No feature is labelled `TESTED-PASS` unless it was actually run. Events are `BLOCKED` because no
-verified feed exists; the page discloses that instead of fabricating a calendar.
+verified feed exists; the page discloses that instead of fabricating a calendar. PostgreSQL, Docker,
+public deployment, WebKit/Safari, screen-reader testing and load testing are `NOT-TESTED` or `BLOCKED`,
+as recorded in the status and testing documents.
 
 ---
 

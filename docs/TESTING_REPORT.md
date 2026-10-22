@@ -3,208 +3,276 @@
 **Date:** 2026-10-22
 **Build tested:** the production bundle served by FastAPI at `http://127.0.0.1:8000` (not the Vite dev
 server), backed by the ingested SQLite warehouse (latest session 2026-10-16).
-**Environment:** macOS 14.3.1 (Darwin arm64), Python 3.12.3, Node 24.20.0, npm 11.19.0, Chromium
-driven by Playwright.
+**Environment:** macOS 14.3.1 (Darwin arm64), Python 3.12.3, Node 24.20.0, npm 11.19.0.
+**Browsers:** Firefox 1555 (Playwright) and Google Chrome (installed channel) on macOS.
 
 Statuses use the project vocabulary: `TESTED-PASS`, `TESTED-FAIL`, `NOT-TESTED`, `BLOCKED`.
 
 ---
 
-## 1. Automated backend tests — TESTED-PASS
+## 1. Result summary
 
-```
-cd backend && .venv/bin/python -m pytest -q -p no:warnings
-58 passed in 1.21s
+| Layer | Checks | Result |
+| --- | --- | --- |
+| Backend unit + API tests | **64 passed** | `TESTED-PASS` |
+| Ruff lint (backend) | clean | `TESTED-PASS` |
+| TypeScript (`tsc -b`) | clean | `TESTED-PASS` |
+| Production build (Vite) | succeeded | `TESTED-PASS` |
+| Firefox primary interaction pass | **55 / 55** | `TESTED-PASS` |
+| Firefox supplemental audit | **15 / 15** | `TESTED-PASS` |
+| Firefox extras (tooltip, zoom, breadth/liquidity CSV) | **6 / 6** | `TESTED-PASS` |
+| Chrome smoke / interaction pass | **36 / 36** | `TESTED-PASS` |
+| **Total browser checks** | **112** | `TESTED-PASS` |
+| Screenshot evidence | 16 final images | `TESTED-PASS` (captured) |
+| WebKit / Safari | launch failure | `BLOCKED` |
+
+No open `TESTED-FAIL` item remains. Two early Firefox assertions and four Chrome route-title
+assertions failed because the harness expected the wrong label or a chart on a page that intentionally
+has none; the app was correct and the assertions were corrected before the recorded pass. They are
+listed in §7 so the history is not hidden.
+
+---
+
+## 2. Automated backend suite
+
+```text
+cd backend && .venv/bin/python -m pytest -p no:warnings
+................................................................         [100%]
+64 passed in 1.28s
+
 cd backend && .venv/bin/ruff check app tests
-All checks passed
+All checks passed!
 ```
 
 | File | Tests | What is pinned |
 | --- | --- | --- |
-| `test_calculations.py` | 12 | Cumulative return positions, zero/missing bases, daily returns, YTD base, drawdown/recovery, volatility, beta, MA, RSI, HHI, top-share, VaR/CVaR |
-| `test_rotation.py` | 12 | All four quadrants, **all boundary cases** (`x=0`, `y=0`), custom thresholds, missing values, RS ratio window guard, transitions |
-| `test_breadth.py` | 6 | Denominator rules, missing ≠ unchanged, zero-decline A/D, all-unavailable, % above MA, new highs/lows |
-| `test_analytics_units.py` | 7 | Concentration, P/E with losses, implausible book value excluded, unverifiable book value included, factor renormalisation |
-| `test_api.py` | 21 | Health, meta, axis contract, sector detail, 404, methodology, **11 endpoints return valid sanitised JSON**, factor payload shape, research payload shape, completeness status, serialiser scrubs `NaN`/`Infinity` |
+| `tests/test_calculations.py` | 14 | Returns, daily returns, drawdown/recovery, volatility, beta, MA, RSI, MACD warm-up masking, correlation length guard, HHI, top-share, VaR/CVaR |
+| `tests/test_rotation.py` | 12 | All four quadrants, boundary cases at `x=0`/`y=0`, custom thresholds, missing values, RS-ratio guard, transitions |
+| `tests/test_breadth.py` | 6 | Advance/decline denominators, missing observations excluded, unchanged handling, A/D ratio, sector breadth |
+| `tests/test_api.py` | 25 | 19-route contract, JSON finiteness, cache clearing, 404s, envelopes, compare alignment/common start, rotation history shape, trail ordering |
+| `tests/test_analytics_units.py` | 7 | Shared analytics/calculation invariants used by the payload builders |
 
-Key assertions worth naming:
+The API suite uses a temporary SQLite database seeded with 300 real-shaped sessions for `BANKING` and
+`NEPSE`. It deliberately exercises the single-sector case as well as the live 13-sector database.
 
-* `test_quadrants[0.0-0.02-ADVANCING]` — zero absolute with positive relative is **Advancing**.
-* `test_quadrants[0.05-0.0-LOSING]` — positive absolute with zero relative is **Losing**.
-* `test_missing_is_not_unchanged` — absence is excluded from the denominator.
-* `test_endpoints_return_sanitised_json[*]` — asserts the literal strings `NaN` and `Infinity` never
-  appear in the response body and that every response parses.
-* `test_data_quality_status_reflects_completeness` — coverage and status agree.
+### New coverage added in this pass
 
-### Post-fix verification
-
-A stale-results bug in the command palette (searching "risk" surfaced Dashboard first because its
-description mentions risk) was fixed by ranking label matches above description matches. The fix was
-re-verified in the browser: typing `risk` lists **Risk Lab** first and Enter navigates to `/risk`.
-
-Mobile regression found during this pass: after adding a minimum-width heatmap scroller, the page
-itself overflowed horizontally (390 px viewport, 570 px scroll width). Root cause: CSS grid items
-default to `min-width: auto`. Fixed by `min-w-0` on the card primitive. Re-test: scroll width 380 px =
-client width 380 px, and the heatmap scrolls internally (520 px content in a 314 px viewport).
+* `test_compare_aligns_series` — both series start at the computed common date, are date-sorted, and
+  end on the same session.
+* `test_compare_unknown_series_404`.
+* `test_rotation_history_shape` — 60 dates, each rank/relative/absolute array aligns, ranks are not
+  all null.
+* `test_rotation_trails_are_ordered` — trail length bounded, dates sorted, coordinates present.
+* `test_calculations.test_correlation_rejects_mismatched_lengths` and the MACD warm-up test.
 
 ---
 
-## 2. Frontend static checks — TESTED-PASS
+## 3. Firefox interaction pass
 
+Scripts (committed for reproducibility):
+
+```text
+scripts/verification/firefox-primary.cjs      55 checks
+scripts/verification/firefox-supplemental.cjs 15 checks
+scripts/verification/firefox-extras.cjs        6 checks
 ```
-cd frontend && npx tsc -b          # exit 0
-cd frontend && npm run build       # exit 0, 23 assets, dist ≈ 1.1 MB
+
+Run against the production build:
+
+```bash
+NODE_PATH=/path/to/node_modules node scripts/verification/firefox-primary.cjs
+NODE_PATH=/path/to/node_modules node scripts/verification/firefox-supplemental.cjs
+NODE_PATH=/path/to/node_modules node scripts/verification/firefox-extras.cjs
 ```
 
-Production chunks:
+### 3.1 Primary pass — 55 / 55
 
-| Chunk | Raw | Gzip |
-| --- | --- | --- |
-| `echarts` (vendor, lazily used by chart pages) | 708.46 kB | 235.66 kB |
-| `react` (vendor) | 163.69 kB | 53.30 kB |
-| `index` (app shell) | 54.90 kB | 17.38 kB |
-| `Dashboard` (lazy) | 22.16 kB | 6.66 kB |
-| `SectorExplorer` (lazy) | 16.94 kB | 5.56 kB |
-| `Methodology` (lazy) | 14.84 kB | 5.67 kB |
-| CSS | 28.11 kB | 6.37 kB |
-
-ECharts was switched from the full package to explicit `echarts/core` registration: 1,052 kB →
-708 kB raw (348 → 236 kB gzip), a 32 % reduction, with no missing-component errors at runtime.
-
----
-
-## 3. Browser pass — TESTED-PASS
-
-Twelve routes were loaded in a real Chromium session at 1440 × 900, with a 2–4 s settle and console
-capture.
-
-| Route | Page | Console errors | Rendered |
-| --- | --- | --- | --- |
-| `/` | Dashboard | 0 | KPI cards, 4 charts, leadership, breadth, turnover treemap, risk scatter, freshness |
-| `/sectors` | Sector Explorer | 0 | 3 charts, technical panel, breadth, liquidity, member table |
-| `/rotation` | Rotation Lab | 0 | Quadrant (canvas), trail sparkline, census, table, crossings |
-| `/breadth` | Breadth Lab | 0 | Participation chart, net advances, sector table; sector name opens the MA-breadth deep dive |
-| `/liquidity` | Liquidity Lab | 0 | Stacked turnover, donut, table, concentration panel |
-| `/risk` | Risk Lab | 0 | Bubble, volatility ranking, risk table, drawdown |
-| `/fundamentals` | Fundamentals Lab | 0 | P/E bars, ROE/P/E bubbles, sector table, members |
-| `/events` | Events & Research | 0 | Explicit UNAVAILABLE state |
-| `/research` | Quantitative Research Lab | 0 | Score bars, attribution, persistence heatmap, backtest |
-| `/data-quality` | Data Quality Center | 0 | Coverage table, inventory, controls, runs, register |
-| `/methodology` | Methodology | 0 | Ten sections, formulas, status vocabulary |
-| `/nope` | Not found | 0 | Designed 404 with navigation back |
-
-**Total console errors across the sweep: 0.** No unhandled promise rejections, no ECharts
-"series/component not found" errors, no React key warnings.
-
-### Interaction evidence
-
-| Interaction | Method | Observed result |
-| --- | --- | --- |
-| Rotation lookback 20 → 5 | Click `[role=tab][aria-label="Lookback"]` first tab | Header changed `ABSOLUTE VS RELATIVE · 20 SESSIONS` → `· 5 SESSIONS`; table recomputed (Commercial Banks `+3.8 %` absolute, `+2.1 %` relative) |
-| Trail replay 25 → 50 | `Trail` tablist | `aria-selected` moves; chart redraws |
-| Command palette open | `⌘K` | Dialog `[aria-label="Command palette"]` opens, input autofocuses |
-| Command palette search | Type `risk` | Results: **Risk Lab**, Dashboard, Sector Explorer (label match ranked first) |
-| Command palette navigate | `Enter` | URL `/risk`, H1 "Return is what happened. Risk is the shape of the path." |
-| Theme toggle | Click `[aria-label="Switch to dark theme"]` | `html` class `dark`, body background `rgb(11, 17, 16)`, charts recolour |
-| Sector switch | Click "Hydro Power" chip | URL `/sectors?code=HYDROPOWER`, 3 canvases re-render |
-| Factor weights | Focus `input[aria-label="20D momentum weight"]`, 8 × ArrowRight | Value 25 → 50, `total weight 125`, table reloads, Commercial Banks score 91.4 → 92.4 |
-| Mobile drawer | 390 × 844, click `[aria-label="Open menu"]` | Primary nav visible, body scroll locked |
-| Mobile overflow | 390 × 844 | `scrollWidth = clientWidth = 380`; heatmap scroller 520 px inside 314 px |
-| Sector heatmap cell click | Click a cell on the dashboard heatmap | URL `/sectors?code=HYDROPOWER`, H1 "One sector, every lens.", 3 charts render |
-| Breadth deep dive | Click a sector name in the breadth table | Chart count 1 → 2; "Members above their own moving average" appears (MA 20/50/100/200) |
-
-### Screenshots (real captures, not mockups)
-
-| File | Content |
+| Page / area | Checks exercised |
 | --- | --- |
-| `01-dashboard.png` | Full dashboard, light theme, 1440 px |
-| `02-sector-explorer.png` | Commercial Banks detail |
-| `03-rotation-lab.png` | Quadrant + table at 20 sessions |
-| `04-breadth-lab.png` | Participation, MA breadth, sector table |
-| `05-liquidity-lab.png` | Stacked turnover, donut, concentration |
-| `06-risk-lab.png` | Risk/return bubbles, ranking, drawdown |
-| `07-fundamentals-lab.png` | P/E bars, log-axis ROE/P/E, member table |
-| `08-events-research.png` | UNAVAILABLE disclosure |
-| `09-research-lab.png` | Factor bars, attribution, persistence, backtest |
-| `10-data-quality.png` | Coverage with INCOMPLETE rows, source register |
-| `11-methodology.png` | Full methodology |
-| `12-not-found.png` | 404 |
-| `13-dark-rotation.png` | Dark theme, rotation trails |
-| `14-command-palette.png` | Palette open |
-| `15-command-palette-search.png` | Filtered to "risk" |
-| `16-mobile-dashboard.png` | 390 px dashboard |
-| `17-sector-explorer-hydro.png` | Sector switched to Hydro Power |
-| `18-research-weights.png` | Weights changed, scores recomputed |
-| `19-mobile-drawer.png` | Mobile navigation drawer |
-| `20-rotation-trail-50.png` | Trail replayed from 25 to 50 sessions |
-| `21-heatmap-cell-click.png` | Sector page reached by clicking a dashboard heatmap cell |
-| `22-breadth-deep-dive.png` | Breadth deep dive opened from a sector name |
+| Sector Comparison | Heading; 1Y preset updates From date; 5Y selected; Return % mode; chip toggles a series off; Reset restores 3Y + chip; CSV; PNG; zero console errors |
+| Rotation Lab | Heading; 60-session lookback updates eyebrow; volatility bubble; filter opens; hide Commercial Banks (12/13); Show all (13/13); timeline Excess mode; threshold panel; Reset restores 20 + Rank; CSV; PNG; zero console errors |
+| Breadth Lab | 260-window badge; 60-window badge; PNG; zero console errors |
+| Risk Lab | Sector select changes to `BANKING`; CSV; PNG; zero console errors |
+| Fundamentals Lab | Next sector changes the member panel; CSV; PNG; zero console errors |
+| Sector Explorer | Finance chip switches panel; 1Y range selected; PNG; zero console errors |
+| Research Lab | Weight slider changes output; reset restores the first weight to 25; zero console errors |
+| Data Quality / Events / Methodology / 404 | Each renders an `h1`; zero console errors |
+| Command palette | `Meta+K` opens; typing `rotation` + Enter navigates to `/rotation` |
+| Theme | Toggle adds `dark` to `<html>` |
+| Mobile 390 px | Drawer opens; Rotation link navigates; zero console errors |
+
+### 3.2 Supplemental pass — 15 / 15
+
+| Check | Evidence |
+| --- | --- |
+| Rotation table selects Hydro Power | Selected-sector panel and "Open full sector" appear |
+| Trail 25 keeps both charts | Chart count ≥ 2 |
+| Zoom reset control | Caption remains, chart survives |
+| Rotation CSV structure | 14 lines, header begins `Sector,Code,Absolute,…` |
+| Breadth deep dive | Commercial Banks shows "Members above their own moving average" + Clear |
+| Fundamentals table selects Finance | Member detail updates |
+| Fundamentals CSV structure | 14 lines, header `sector,coverage,net_profit_npr,…` |
+| Data Quality re-check | Action completes, page stays rendered |
+| Compare CSV structure | 5 lines (4 series + header), header begins `Series,Code,First close,…` |
+| Compare PNG | Magic bytes `89504e47…`; 2172×1040; 484,907 bytes |
+| All five pages | Zero console/page errors |
+
+### 3.3 Extras — 6 / 6
+
+| Check | Evidence |
+| --- | --- |
+| Enriched rotation tooltip | Hovering Life Insurance shows sector name, `WINNING`, absolute/relative, RS ratio, 20-session return, volatility, market cap, turnover, advancing members, HHI and latest-observation status |
+| Wheel zoom | Scrolling over the map changes the rendered canvas hash |
+| Reset zoom | The `Reset zoom` control restores the **exact** pre-zoom canvas hash (`c737a2d0…`) |
+| Breadth CSV | `nepse-breadth-2026-10-16.csv`, 13 lines; header begins `Sector,Advances,Declines,…` |
+| Liquidity CSV | `nepse-liquidity-2026-10-16.csv`, 13 lines; header begins `Sector,Turnover,Share,…` |
+| Error channels | Zero console/page errors across the rotation, breadth and liquidity runs |
+
+The zoom check is byte-level, not a visual impression: the canvas screenshot MD5 before zoom and after
+reset are identical. The tooltip check targets text that exists **only** in the tooltip (“Advancing
+members”, “Turnover HHI”), so it cannot be satisfied by the table.
+
+### 3.4 Downloads inspected
+
+| File | Observed |
+| --- | --- |
+| `nepse-compare-2023-10-22-latest.csv` | 503 B, 5 rows, series summary header |
+| `nepse-compare-normalized.png` | 484,906 B, 2172×1040 |
+| `nepse-rotation-20s-2026-10-16.csv` | 3,645 B, 14 rows, full table columns |
+| `nepse-rotation-20s.png` | 171,320 B |
+| `nepse-risk-metrics.csv` | 2,180 B |
+| `risk-return-scatter.png` | 109,528 B |
+| `breadth-advance-decline.png` | 271,626 B |
+| Fundamentals CSV | 14 rows, aggregate header verified |
+| `nepse-breadth-2026-10-16.csv` | 13 lines (12 sectors + header), advance/decline/traded columns |
+| `nepse-liquidity-2026-10-16.csv` | 13 lines (12 sectors + header), turnover/share/HHI columns |
+
+Rows are raw values (fractions for returns, NPR for money); the filename carries the selected window
+and latest date where relevant. Exports are generated entirely in the browser; no server round-trip.
 
 ---
 
-## 4. Performance — TESTED-PASS
+## 4. Chrome cross-browser pass
 
-Measured with `curl` against the running server, cold cache (server just started) and warm cache
-(in-process TTL still valid).
+Script: `scripts/verification/chrome-smoke.cjs`
 
-| Endpoint | Cold | Warm | Raw | Gzip |
-| --- | --- | --- | --- | --- |
-| `/api/dashboard` | 1.312 s | 0.011 s | 47 kB | 10 kB |
-| `/api/rotation` | 0.124 s | 0.001 s | 6 kB | 1 kB |
-| `/api/heatmap` | 0.076 s | 0.001 s | 3 kB | 1 kB |
-| `/api/breadth` | 0.342 s | 0.004 s | 27 kB | 4 kB |
-| `/api/liquidity` | 0.292 s | 0.008 s | 95 kB | 24 kB |
-| `/api/risk` | 0.127 s | 0.001 s | 3 kB | 1 kB |
-| `/api/fundamentals` | 0.590 s | 0.007 s | 81 kB | 13 kB |
-| `/api/factors` | 0.518 s | 0.002 s | 11 kB | 2 kB |
-| `/api/research` | 0.150 s | 0.002 s | 18 kB | 9 kB |
-| `/api/data-quality` | 0.188 s | 0.001 s | 8 kB | 2 kB |
-| `/api/sectors` | 0.002 s | 0.001 s | 2 kB | < 1 kB |
+```text
+PASS chrome / renders … /methodology renders   (12 routes)
+PASS chrome * no console errors                (12 routes)
+PASS chrome rotation lookback + CSV + PNG
+PASS chrome compare preset + CSV
+PASS chrome sector switch
+PASS chrome mobile no horizontal overflow
+PASS chrome mobile drawer navigates
+PASS chrome mobile no errors
+PASS chrome command palette
+PASS chrome dark theme
+PASS chrome layout no errors
 
-Optimisations proven by the numbers:
+CHROME SUMMARY { pass: 36, fail: 0 }
+```
 
-* Vectorised transition/backtest replay: `/api/research` 15.48 s → 0.12–0.15 s.
-* Dashboard no longer ships the 260-session liquidity history: 141 kB → 47 kB raw.
-* GZip middleware: dashboard 47 kB → 10 kB, liquidity 95 kB → 24 kB on the wire.
-* In-process 90 s TTL: warm payloads 1–11 ms.
+The Chrome run uses the installed Chrome channel, not bundled Chromium. Chart canvases, downloads,
+presets, the sector switch, the mobile drawer and the command palette all worked. There were **zero
+console or page errors** on all 12 routes.
 
-### Ingestion idempotency — TESTED-PASS
+### WebKit
 
-The fundamentals stage was run twice against the final build. Each run wrote 4,840 rows, the table
-count stayed at 4,840 and no duplicate `(symbol, fiscal year, quarter, report type)` keys appeared.
-The stage now replaces the snapshot in one transaction, so an amended filing (same key, newer
-document) is refreshed instead of being skipped. The run log intentionally retains two failures from
-the development session (a `float.strip` bug and a unique-constraint bug); both were fixed and rerun,
-and the Data Quality Center shows the real history.
+```text
+npx playwright install webkit   # downloaded
+node … webkit smoke
+browserType.launch: Target page, context or browser has been closed
+… Bus error: 10
+```
+
+Playwright's WebKit build crashes before the first page on this macOS host. No Safari/WebKit claim is
+made. This is recorded as `BLOCKED`, not as an app failure.
 
 ---
 
-## 5. Not tested / blocked
+## 5. Screenshot evidence
 
-| Area | Status | Reason |
+Sixteen final PNGs, all captured from the running production build in a **fresh Firefox instance per
+page**. The viewport height was set to the measured content height **before** navigation, so each
+image is a single viewport rather than a stitched full-page capture. This avoids the Chromium
+full-page stitching artifacts observed during the build. Text in low-resolution previews was
+re-checked with 2–3× nearest-neighbour crops before any layout conclusion was drawn.
+
+| File | Viewport | What it shows |
 | --- | --- | --- |
-| Firefox, Safari, iOS Safari | `NOT-TESTED` | Only Chromium was available in this environment |
-| Screen-reader walkthrough (VoiceOver/NVDA) | `NOT-TESTED` | No assistive-technology session was run; text/table equivalents exist but were not audited with AT |
-| Load/concurrency testing | `NOT-TESTED` | Single-user local run only; no k6/Locust run |
-| Postgres behaviour | `NOT-TESTED` | No PostgreSQL server available; SQLAlchemy models are dialect-neutral and `psycopg` is declared, but the deployed path was not exercised |
-| Docker image build | `NOT-TESTED` | Dockerfile written and reviewed; no `docker build` run in this environment |
-| Free-host deployment | `NOT-TESTED` | No provider account provisioned; see DEPLOYMENT.md |
-| Corporate events | `BLOCKED` | No verified public feed; the page reports `UNAVAILABLE` |
-| Historical sector membership | `BLOCKED` | Not published by any available source |
-| Revenue/assets/leverage fundamentals | `BLOCKED` | Absent from the verified filings feed |
-| Official NEPSE endpoints | `BLOCKED` | HTTP 401; authentication not bypassed |
-| Reduced-motion chart animation | `NOT-TESTED` | CSS motion is respected; ECharts animation is not tied to the media query |
+| `01-dashboard.png` | 1440×2711 | Full dashboard: lead, rotation, heatmap, breadth, liquidity, risk, trust |
+| `02-rotation-lab.png` | 1440×2998 | Map, table, selected sector, timeline, crossings, axis contract |
+| `03-sector-comparison.png` | 1440×1908 | Rebased multi-series chart and statistics |
+| `04-breadth-lab.png` | 1440×2248 | 120-session breadth, divergence, sector width, deep dive |
+| `05-liquidity-lab.png` | 1440×2419 | Stacked turnover, share donut, scatter, concentration |
+| `06-risk-lab.png` | 1440×3153 | Risk/return, volatility, 14×14 correlation, table, drawdown |
+| `07-fundamentals-lab.png` | 1440×2440 | P/E dot plot, ROE bubble, aggregates, member table |
+| `08-sector-explorer.png` | 1440×2902 | Price structure, participation, liquidity, risk, filings |
+| `09-quantitative-research.png` | 1440×2078 | Factor model, ranking, attribution, transitions, backtest |
+| `10-data-quality.png` | 1440×2721 | Coverage, inventory, validation, runs, source register |
+| `11-events-research.png` | 1440×1211 | Planned coverage and `UNAVAILABLE` source status |
+| `12-methodology.png` | 1440×4000 | Full method reference |
+| `13-dashboard-dark.png` | 1440×900 | Dark theme, top of dashboard |
+| `14-rotation-dark.png` | 1440×900 | Dark theme, rotation map and controls |
+| `15-dashboard-mobile.png` | 390×844 | Mobile layout; scroll width equals client width |
+| `16-not-found.png` | 1440×900 | 404 route |
+
+The screenshot directory contains only these 16 files; exploratory/test captures were removed.
 
 ---
 
-## 6. Method notes and honest limitations
+## 6. What was not tested
 
-* The browser pass is **exploratory**, not a scripted regression suite. There is no committed
-  Playwright test file yet; the evidence is the captured console output, DOM assertions and
-  screenshots above.
-* The screenshots are of the **production bundle** served by the API, which is why routing, static
-  assets and SPA fallback are exercised together.
-* Cold timings include pandas frame construction and are single-run; they are indicative, not a
-  benchmark.
-* No claim is made that the app is accessible, cross-browser or load-tested beyond what is listed.
-  Every unimplemented check is marked `NOT-TESTED`, not assumed.
+| Area | Status | Why |
+| --- | --- | --- |
+| Safari / WebKit | `BLOCKED` | Playwright WebKit `Bus error` before launch on this host |
+| PostgreSQL | `NOT-TESTED` | No server available; SQLite is live |
+| Docker build / image run | `NOT-TESTED` | Docker daemon not exercised in this pass |
+| Public deployment / cold starts | `NOT-TESTED` | No account or credentials used |
+| VoiceOver / NVDA / formal WCAG | `NOT-TESTED` | No assistive-technology audit run |
+| Load / concurrency | `NOT-TESTED` | No benchmark |
+| Hover tooltip on every mark | `IMPLEMENTED` | The enriched rotation tooltip was verified; other charts' tooltips were not asserted mark-by-mark |
+| Wheel/pinch zoom | `TESTED-PASS` (wheel) · `NOT-TESTED` (touch pinch) | Wheel zoom changed the canvas and reset restored it byte-for-byte; no touch device was available |
+
+---
+
+## 7. Harness corrections (not app defects)
+
+These early failures are recorded so the final green run is not mistaken for a run that was always
+green.
+
+| Early failure | Cause | Resolution |
+| --- | --- | --- |
+| Breadth badge assertion expected `120 index sessions` | CSS uppercases the status badge; `innerText` returns `120 INDEX SESSIONS` | Assertion made case-insensitive; UI was correct |
+| Rotation thresholds asserted number inputs | Thresholds are range sliders | Query corrected to `input[type=range]` |
+| Fundamentals waited for "Latest reported snapshot" | That label belongs to Sector Explorer; Fundamentals uses a member-detail card | Wait on the page `h1` and the member panel |
+| Sector Explorer expected the breadth title immediately | The sector query had not resolved within 1 s | Wait for the new panel text; UI was correct |
+| Chrome expected `/turnover/i`, `/Price structure/i`, `/method/i` | Actual page titles are "Trading value is not conviction.", "One sector, every lens.", "Every number has a definition." | Assertions corrected |
+| Chrome expected a chart on Data Quality | That page is intentionally table/status-led | Chart assertion exempted |
+| Extras script read `.chart-frame` without scoping | Rotation has three chart frames | Scoped the text assertion to the rotation-map frame; app was correct |
+
+---
+
+## 8. Reproduce
+
+```bash
+# backend
+cd backend
+.venv/bin/python -m pytest -p no:warnings
+.venv/bin/ruff check app tests
+
+# frontend
+cd ../frontend
+npx tsc -b
+npm run build
+
+# serve the built app
+cd ../backend
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# browser checks (requires Playwright; see scripts/verification/README.md)
+cd ..
+node scripts/verification/firefox-primary.cjs
+node scripts/verification/firefox-supplemental.cjs
+node scripts/verification/chrome-smoke.cjs
+```

@@ -2,14 +2,16 @@ import type { EChartsOption } from 'echarts'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Droplets, Layers3 } from 'lucide-react'
+import { ArrowUpRight, Download, Droplets, Layers3 } from 'lucide-react'
 import { api } from '../lib/api'
-import type { LiquiditySummary } from '../lib/api'
+import type { LiquidityRow, LiquiditySummary } from '../lib/api'
 import { Chart } from '../components/Chart'
 import { Card, CardHeader, ErrorState, InfoNote, Loading, Metric, PageHeader, StatusBadge } from '../components/ui'
 import { useTheme } from '../lib/useTheme'
 import { axisStyle, baseOption, palette } from '../lib/chart'
-import { compact, dateLabel, dateShort, npr, num, pct } from '../lib/format'
+import { cn, compact, dateLabel, dateTick, needsYear, npr, num, pct, signedPct, toneClass } from '../lib/format'
+import { downloadCsv } from '../lib/export'
+import { Segmented } from '../components/ui'
 
 const SECTOR_COLORS = [
   '#0e7c66',
@@ -88,6 +90,7 @@ function SectorLiquidityDetail({ sector }: { sector: string }) {
 export default function LiquidityLab() {
   const { isDark } = useTheme()
   const [sector, setSector] = useState('')
+  const [horizon, setHorizon] = useState<'return_5' | 'return_20' | 'return_60'>('return_20')
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['liquidity-summary'],
     queryFn: () => api.liquidity() as Promise<LiquiditySummary>,
@@ -98,6 +101,98 @@ export default function LiquidityLab() {
   const hhi = rows.reduce((s, r) => s + (r.share ?? 0) ** 2, 0)
   const history = data?.history ?? []
   const names = useMemo(() => rows.map((r) => r.sector_name), [rows])
+
+  // Turnover is heavy-tailed by two orders of magnitude, so a log x axis is the
+  // honest way to show the full cross-section in one frame.
+  const scatterOption = useMemo(() => {
+    const p = palette(isDark)
+    const axis = axisStyle(isDark, { split: true, labelSize: 9 })
+    const points = rows
+      .filter((r) => r.turnover != null && r.turnover > 0)
+      .map((r, i) => ({
+        name: r.sector_name,
+        value: [r.turnover, r[horizon] ?? null],
+        meta: r,
+        itemStyle: {
+          color: SECTOR_COLORS[i % SECTOR_COLORS.length],
+          borderColor: p.surface,
+          borderWidth: 1.5,
+          opacity: sector && r.sector_name !== sector ? 0.5 : 0.9,
+        },
+        symbolSize:
+          sector === r.sector_name
+            ? 26
+            : 10 + Math.min(20, Math.sqrt((r.market_cap ?? 0) / 1e11) * 4),
+        label: {
+          show: i < 4 || sector === r.sector_name,
+          position: (['right', 'top', 'left', 'bottom'] as const)[i % 4],
+        },
+      }))
+      .filter((d) => d.value[1] !== null)
+    return {
+      ...baseOption(isDark),
+      grid: { left: 54, right: 26, top: 24, bottom: 46 },
+      tooltip: {
+        ...baseOption(isDark).tooltip,
+        trigger: 'item',
+        formatter: (params: unknown) => {
+          const d = params as { data?: { meta?: LiquidityRow; value?: number[] } }
+          const r = d.data?.meta
+          if (!r) return ''
+          return `<div style="min-width:196px"><b>${r.sector_name}</b>
+            <div style="height:1px;background:${p.line};margin:6px 0"></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Turnover</span><b style="font-family:'IBM Plex Mono',monospace">${npr(r.turnover)}</b></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Share</span><b style="font-family:'IBM Plex Mono',monospace">${pct(r.share)}</b></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">20D return</span><b style="font-family:'IBM Plex Mono',monospace">${signedPct(r.return_20)}</b></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Market cap</span><b style="font-family:'IBM Plex Mono',monospace">${npr(r.market_cap)}</b></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Turnover HHI</span><b style="font-family:'IBM Plex Mono',monospace">${r.hhi == null ? '—' : r.hhi.toFixed(3)}</b></div>
+            <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Effective N</span><b style="font-family:'IBM Plex Mono',monospace">${r.effective_n == null ? '—' : r.effective_n.toFixed(1)}</b></div>
+          </div>`
+        },
+      },
+      xAxis: {
+        type: 'log',
+        name: 'Turnover · NPR (log scale)',
+        nameLocation: 'middle',
+        nameGap: 30,
+        nameTextStyle: { color: p.muted, fontSize: 9, fontFamily: "'IBM Plex Mono', monospace" },
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: number) => compact(v) },
+        splitLine: { lineStyle: { color: p.grid, type: 'dashed' } },
+      },
+      yAxis: {
+        type: 'value',
+        name: `${horizon === 'return_5' ? '5' : horizon === 'return_20' ? '20' : '60'}-session return`,
+        nameLocation: 'middle',
+        nameGap: 40,
+        nameTextStyle: { color: p.muted, fontSize: 9, fontFamily: "'IBM Plex Mono', monospace" },
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: number) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%` },
+      },
+      series: [
+        {
+          type: 'scatter',
+          data: points,
+          label: {
+            show: true,
+            color: p.muted,
+            fontSize: 8,
+            formatter: (params: unknown) => (params as { name: string }).name.split(' ')[0],
+            textBorderColor: p.surface,
+            textBorderWidth: 2.5,
+          },
+          labelLayout: { hideOverlap: true },
+          markLine: {
+            silent: true,
+            symbol: ['none', 'none'],
+            lineStyle: { color: p.faint, type: 'dashed', opacity: 0.55 },
+            label: { show: false },
+            data: [{ yAxis: 0 }],
+          },
+        },
+      ],
+    } as unknown as EChartsOption
+  }, [rows, horizon, sector, isDark])
 
   const historyOption = useMemo(() => {
     const p = palette(isDark)
@@ -117,7 +212,7 @@ export default function LiquidityLab() {
         data: history.map((h) => String(h.date)),
         boundaryGap: false,
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear(history.map((h) => String(h.date)))), hideOverlap: true },
       },
       yAxis: {
         type: 'value',
@@ -199,12 +294,12 @@ export default function LiquidityLab() {
                 title="Stacked traded value"
                 subtitle="Observed security turnover, summed by current sector membership"
               />
-              <Chart option={historyOption} height={340} />
+              <Chart option={historyOption} height={340} exportName="liquidity-turnover-history" />
               <InfoNote>{data.notes?.[0] ?? 'Turnover is trading value, not net investor inflow.'}</InfoNote>
             </Card>
             <Card>
               <CardHeader eyebrow="Share of turnover" title="Latest session mix" subtitle={`Total ${npr(total)}`} />
-              <Chart option={shareOption} height={270} />
+              <Chart option={shareOption} height={270} exportName="liquidity-turnover-share" />
               <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-muted">
                 {rows.slice(0, 8).map((r, i) => (
                   <span key={r.sector_name} className="flex items-center gap-1.5 truncate">
@@ -214,14 +309,69 @@ export default function LiquidityLab() {
                   </span>
                 ))}
               </div>
+              <div className="mt-2 text-[10px] text-faint">Top 8 of {rows.length} sectors; full table below.</div>
             </Card>
           </div>
 
           <Card className="mt-4">
             <CardHeader
+              eyebrow="Turnover vs performance"
+              title="Does traded value follow returns?"
+              subtitle="Each bubble is a sector; x is latest-session turnover on a log scale and y is the selected return horizon. Bubble area scales with market capitalisation. Correlation here is descriptive — turnover is not investor inflow."
+              actions={
+                <Segmented
+                  options={[
+                    { value: 'return_5', label: '5D' },
+                    { value: 'return_20', label: '20D' },
+                    { value: 'return_60', label: '60D' },
+                  ]}
+                  value={horizon}
+                  onChange={setHorizon}
+                  size="sm"
+                />
+              }
+            />
+            <Chart
+              option={scatterOption}
+              height={400}
+              exportName={`liquidity-turnover-${horizon}`}
+              onEvents={{
+                click: (params: unknown) => {
+                  const name = (params as { name?: string }).name
+                  if (name) setSector(name)
+                },
+              }}
+            />
+            <p className="mt-2 text-[10px] text-muted">
+              Sectors above the dashed zero line rose over the horizon; sectors to the right traded more value on
+              the latest session. Click a bubble to open its within-sector concentration detail below.
+            </p>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader
               eyebrow="Concentration"
               title="Sector turnover table"
-              subtitle="Share is computed on observed turnover, not total market capitalization."
+              subtitle="Share is computed on observed turnover, not total market capitalization. HHI is within-sector turnover concentration."
+              actions={
+                <button
+                  className="btn"
+                  onClick={() =>
+                    downloadCsv(
+                      `nepse-liquidity-${data.latest_date ?? 'latest'}`,
+                      ['Sector', 'Turnover', 'Share', 'Volume', 'Traded names', '20D return', 'Market cap', 'HHI', 'Effective N', 'Top-1 share'],
+                      [...rows]
+                        .sort((a, b) => (b.turnover ?? 0) - (a.turnover ?? 0))
+                        .map((r) => [
+                          r.sector_name, r.turnover, r.share, r.volume, r.securities,
+                          r.return_20, r.market_cap, r.hhi, r.effective_n, r.top1_share,
+                        ]),
+                    )
+                  }
+                >
+                  <Download size={12} /> CSV
+                </button>
+              }
             />
             <div className="table-wrap">
               <table className="data-table">
@@ -233,6 +383,9 @@ export default function LiquidityLab() {
                     <th className="text-right">Share</th>
                     <th className="text-right">Volume</th>
                     <th className="text-right">Traded names</th>
+                    <th className="text-right">20D</th>
+                    <th className="text-right">HHI</th>
+                    <th className="text-right">Eff. N</th>
                     <th className="w-40">Share bar</th>
                   </tr>
                 </thead>
@@ -247,6 +400,9 @@ export default function LiquidityLab() {
                       <td className="num text-right">{pct(r.share)}</td>
                       <td className="num text-right text-muted">{compact(r.volume)}</td>
                       <td className="num text-right">{r.securities}</td>
+                      <td className={cn('num text-right', toneClass(r.return_20))}>{signedPct(r.return_20)}</td>
+                      <td className="num text-right text-muted">{r.hhi == null ? '—' : r.hhi.toFixed(3)}</td>
+                      <td className="num text-right text-muted">{r.effective_n == null ? '—' : r.effective_n.toFixed(1)}</td>
                       <td>
                         <div className="h-2 overflow-hidden rounded-sm bg-line/60">
                           <div className="h-full rounded-sm" style={{ width: `${(r.share ?? 0) * 100}%`, backgroundColor: SECTOR_COLORS[i % SECTOR_COLORS.length] }} />

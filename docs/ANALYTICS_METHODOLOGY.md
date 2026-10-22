@@ -74,9 +74,10 @@ boundary.
 
 ### 2.3 Lookbacks
 
-`5, 10, 20, 60, 120` sessions; default **20**. Trails use the same window and can replay 0–120 past
-sessions; each trail point is computed from the truncated history ending on that session, so a trail
-is a true path of the metric, not an interpolation.
+`5, 10, 20, 60, 120` sessions; default **20**. Trails use the same window. The UI offers Off/10/25/50
+sessions; the API accepts 2–250 (0 is handled client-side by not requesting a trail). Each trail point
+is computed from the truncated history ending on that session, so a trail is a true path of the metric,
+not an interpolation.
 
 ### 2.4 Momentum change
 
@@ -96,6 +97,39 @@ Positive means the 20-session return improved versus the preceding 20-session re
 * RS ratio: `1.0558` (5.58 % ahead on a compounded basis)
 
 The quadrant census on the same date: 4 Winning, 0 Advancing, 0 Losing, 9 Lagging.
+
+### 2.6 Rank history and the leadership timeline
+
+`/api/rotation/history` recomputes the selected lookback on every session and ranks sectors by
+**relative strength** (excess return), not absolute return:
+
+```
+rank_i(t) = rank of (r_i(t) - r_NEPSE(t)) among sectors observed at t, descending
+```
+
+A missing observation is `null` and is **not ranked**; it is never carried forward. Rank `1` is the
+strongest excess return. The timeline can also plot the excess return itself; the y contract changes
+with the mode, and the card title states which one is active. Past rank is an observation, not a
+forecast.
+
+### 2.7 Sector comparison
+
+`/api/compare` returns each series on the union of observed dates in the requested range, then reports:
+
+```
+common_start = max(first observed date of each selected series)
+```
+
+The client starts all lines at `common_start`, so a late-listed sector cannot imply an earlier shared
+history. Three display modes use the same aligned levels:
+
+* **Absolute** — unadjusted index level.
+* **Rebased** — `level / first level at common_start × 100`.
+* **Return** — `level / first level at common_start − 1`.
+
+If the range exceeds 2,000 observations, the server keeps every `ceil(n / 2000)`-th point and always
+appends the final observation. The chart and the window-statistics table both use that sampled payload,
+so the table's observation count is the displayed count. Index levels are unadjusted (see §9.3).
 
 ---
 
@@ -126,7 +160,9 @@ On 2026-10-16 the market breadth was **174 advances, 91 declines, 12 unchanged**
 * **% above MA(n):** for each security with at least *n* observations, compare the latest close to
   its own simple moving average. The share above is reported.
 * **New highs / lows:** latest close vs. the maximum/minimum of its last 252 observations.
-* **Breadth thrust:** mean of the last 10 daily advance percentages.
+* **Breadth thrust:** mean of the last 10 daily advance percentages. The Breadth Lab keeps the raw
+daily share visible (faint) and overlays this 10-session mean; the mean is a display smoother, not a
+replacement series.
 * **Divergence:** over 20 sessions, if the index rose while advance share fell →
   `PRICE_UP_BREADTH_DOWN`; the opposite → `PRICE_DOWN_BREADTH_UP`.
 
@@ -134,7 +170,9 @@ On 2026-10-16 the market breadth was **174 advances, 91 declines, 12 unchanged**
 
 Computed from current members' daily summaries, grouped by `sector_name`. Historical membership is
 not available, so a sector's past breadth uses today's constituents. This is a **survivorship and
-classification bias** and is disclosed on the page.
+classification bias** and is disclosed on the page. The market breadth payload carries up to 260
+sessions plus the NEPSE close for the same dates; the NEPSE line is indexed to 100 at the first date
+in the selected window before it is drawn on the right axis.
 
 ---
 
@@ -154,7 +192,8 @@ same concentration. A high HHI means a sector's traded value depends on a few na
 transaction; the app never calls turnover "money entering the sector".
 
 Historical transaction counts are not present in the summary source, so only turnover and volume are
-shown over time.
+shown over time. The cross-section also carries 5-, 20- and 60-session sector returns, computed on the
+sector's own observed sessions, for the turnover-vs-performance scatter.
 
 ---
 
@@ -180,6 +219,18 @@ max drawdown is not a like-for-like comparison when histories differ; the table 
 with that caveat in the methodology page.
 
 **Beta uses aligned pairs only.** Dates where either series is missing are dropped, not filled.
+
+### 5.1 Rolling views and the correlation matrix
+
+* **Correlation matrix:** daily returns for all 13 sectors + NEPSE over the last 252 sessions, then
+  pairwise-complete Pearson correlation with `min_periods=30`. Each cell may therefore use a different
+  overlap; the note says so. The diagonal is `1.00` by construction.
+* **Rolling correlation:** 60-session rolling Pearson correlation with at least 40 paired returns.
+* **Rolling volatility:** 20-session rolling standard deviation of daily returns × √252, at least 15
+  observations.
+
+These are descriptive windows, not regime detection. A rolling point is not comparable to the
+252-session headline metric above it.
 
 ---
 

@@ -125,6 +125,7 @@ export function SectorHeatmap({
         <Chart
           option={option}
           height={height}
+          exportName="sector-performance-heatmap"
           onEvents={{
             click: (params: unknown) => {
               const d = (params as { data?: { value?: [number, number, number] } }).data

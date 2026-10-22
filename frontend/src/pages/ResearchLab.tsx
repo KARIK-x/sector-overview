@@ -249,7 +249,7 @@ export default function ResearchLab() {
             title="Composite scores"
             subtitle={isFetching ? 'Recomputing…' : 'Percentile-weighted score (0–100)'}
           />
-          {isLoading ? <Loading label="Scoring sectors" /> : <Chart option={scoreOption} height={330} />}
+          {isLoading ? <Loading label="Scoring sectors" /> : <Chart option={scoreOption} height={330} exportName="research-factor-scores" />}
         </Card>
       </div>
 
@@ -260,7 +260,7 @@ export default function ResearchLab() {
             title="What drives each score"
             subtitle="Each factor's weighted contribution, in score points. A missing factor contributes nothing and is disclosed below."
           />
-          <Chart option={contributionOption} height={330} />
+          <Chart option={contributionOption} height={330} exportName="research-factor-contributions" />
         </Card>
         <Card>
           <CardHeader eyebrow="Score table" title="Coverage and missing inputs" subtitle="A score built from fewer factors deserves more caution." />
@@ -290,6 +290,7 @@ export default function ResearchLab() {
               </tbody>
             </table>
           </div>
+          <div className="mt-2 text-[10px] text-faint">Scroll for all {sorted.length} sectors.</div>
         </Card>
       </div>
 
@@ -300,7 +301,7 @@ export default function ResearchLab() {
             title="Quadrant persistence"
             subtitle="Historical quadrant transitions across all sectors and sessions. Rows are origin, columns are destination."
           />
-          {loadingResearch ? <Loading label="Loading transitions" /> : <Chart option={matrixOption} height={280} />}
+          {loadingResearch ? <Loading label="Loading transitions" /> : <Chart option={matrixOption} height={280} exportName="research-transition-matrix" />}
           <InfoNote>Diagonal cells indicate persistence. Off-diagonal mass shows where leadership tends to migrate.</InfoNote>
         </Card>
         <Card>
@@ -316,7 +317,7 @@ export default function ResearchLab() {
                 <Metric label="Benchmark" value={`${(((research.backtest.final_benchmark ?? 1) - 1) * 100).toFixed(1)}%`} sub="NEPSE, same windows" />
                 <Metric label="Rebalances" value={research.backtest.points} sub="5-session steps" />
               </div>
-              <Chart option={backtestOption} height={250} />
+              <Chart option={backtestOption} height={250} exportName="research-backtest" />
             </>
           ) : (
             <InfoNote tone="warn">Insufficient overlapping history to run the illustrative backtest.</InfoNote>

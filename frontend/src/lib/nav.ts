@@ -6,6 +6,7 @@ import {
   Database,
   FlaskConical,
   Gauge,
+  GitCompareArrows,
   LayoutDashboard,
   LineChart,
   Newspaper,
@@ -46,6 +47,14 @@ export const NAV: NavItem[] = [
     short: 'Rotation',
     icon: LineChart,
     description: 'Absolute vs relative strength quadrants with configurable lookbacks and trails.',
+    group: 'Labs',
+  },
+  {
+    to: '/compare',
+    label: 'Sector Comparison',
+    short: 'Compare',
+    icon: GitCompareArrows,
+    description: 'Rebase and compare any mix of sector indices against NEPSE over a shared window.',
     group: 'Labs',
   },
   {

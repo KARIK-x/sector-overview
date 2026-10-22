@@ -47,7 +47,7 @@ from ..calculations.rotation import (
     momentum_direction,
     transition,
 )
-from ..ingestion.sources import NEPSE_INDEX_CODE, SECTOR_BY_CODE, SECTOR_SOURCES
+from ..ingestion.sources import NEPSE_INDEX_CODE, SECTOR_BY_CODE, SECTOR_BY_NAME, SECTOR_SOURCES
 from ..models import (
     DailySummary,
     DataIssue,
@@ -196,15 +196,128 @@ def rotation_rows(frame: pd.DataFrame, window: int, abs_thr: float, rel_thr: flo
     return rows
 
 
+def sector_context(session: Session) -> tuple[dict[str, dict[str, Any]], date | None]:
+    """Latest-day cross-section used to size and annotate sector bubbles.
+
+    One query for turnover/breadth (grouped by sector), one for market cap, and
+    one for the per-security turnover needed to compute within-sector HHI. Every
+    value is ``None`` when the source has no observation; nothing is zero-filled.
+    """
+    ctx: dict[str, dict[str, Any]] = {}
+    latest = session.scalar(
+        select(func.max(DailySummary.trade_date)).where(DailySummary.pct_change.is_not(None))
+    )
+    if latest is None:
+        return ctx, None
+
+    rows = session.execute(
+        select(
+            DailySummary.sector_name,
+            func.sum(DailySummary.turnover),
+            func.sum(DailySummary.volume),
+            func.count(DailySummary.symbol),
+            func.sum(case((DailySummary.pct_change > 0, 1), else_=0)),
+            func.sum(case((DailySummary.pct_change < 0, 1), else_=0)),
+            func.sum(case((DailySummary.pct_change == 0, 1), else_=0)),
+        )
+        .where(DailySummary.trade_date == latest, DailySummary.pct_change.is_not(None))
+        .group_by(DailySummary.sector_name)
+    ).all()
+    total_turnover = sum(float(r[1]) for r in rows if r[1] is not None)
+    for name, turnover, volume, traded, advances, declines, unchanged in rows:
+        traded_n = int(traded or 0)
+        ctx[name] = {
+            "turnover": float(turnover) if turnover is not None else None,
+            "volume": float(volume) if volume is not None else None,
+            "traded": traded_n,
+            "advances": int(advances or 0),
+            "declines": int(declines or 0),
+            "unchanged": int(unchanged or 0),
+            "advance_pct": (int(advances or 0) / traded_n) if traded_n else None,
+            "turnover_share": (
+                float(turnover) / total_turnover
+                if turnover is not None and total_turnover
+                else None
+            ),
+        }
+
+    caps = session.execute(
+        select(Security.sector_name, func.sum(Security.market_cap))
+        .where(Security.sector_name.is_not(None), Security.market_cap.is_not(None))
+        .group_by(Security.sector_name)
+    ).all()
+    for name, cap in caps:
+        if name in ctx and cap is not None:
+            ctx[name]["market_cap"] = float(cap)
+
+    # Within-sector turnover concentration on the same session. This is the
+    # only place security-level turnover is read; it never leaves the sector.
+    members = session.execute(
+        select(DailySummary.sector_name, DailySummary.symbol, DailySummary.turnover).where(
+            DailySummary.trade_date == latest, DailySummary.turnover.is_not(None)
+        )
+    ).all()
+    if members:
+        mdf = pd.DataFrame(members, columns=["sector_name", "symbol", "turnover"])
+        for name, group in mdf.groupby("sector_name"):
+            if name not in ctx:
+                continue
+            values = group["turnover"].astype(float)
+            total = float(values.sum())
+            if total <= 0:
+                continue
+            shares = values / total
+            hhi = float((shares**2).sum())
+            ctx[name].update(
+                {
+                    "hhi": hhi,
+                    "effective_n": (1.0 / hhi) if hhi > 0 else None,
+                    "top1_share": float(shares.max()),
+                }
+            )
+    return ctx, latest
+
+
 def rotation_payload(session: Session, window: int = 20, abs_thr: float = 0.0, rel_thr: float = 0.0):
     frame = load_index_frame(session)
     rows = rotation_rows(frame, window, abs_thr, rel_thr)
+    context, context_date = sector_context(session)
+
+    # Bubble-size and tooltip fields. Volatility is measured on the same sector
+    # series and window guard as the risk lab (252 sessions), so the rotation
+    # map and the risk table cannot disagree about the same number.
+    for row in rows:
+        pair = _pair(frame, row["code"])
+        context_row = context.get(row["name"], {})
+        row.update(
+            {
+                "volatility": (
+                    annualized_volatility(
+                        daily_returns(pair[sector_symbol(row["code"])].tolist())[-252:]
+                    )
+                    if len(pair) >= 30
+                    else None
+                ),
+                "return_5": row.get("return_5"),
+                "market_cap": context_row.get("market_cap"),
+                "turnover": context_row.get("turnover"),
+                "turnover_share": context_row.get("turnover_share"),
+                "advance_pct": context_row.get("advance_pct"),
+                "traded": context_row.get("traded"),
+                "hhi": context_row.get("hhi"),
+                "effective_n": context_row.get("effective_n"),
+                "top1_share": context_row.get("top1_share"),
+                "context_date": _date_str(context_date),
+            }
+        )
+
     transitions = rotation_transitions(frame, window, abs_thr, rel_thr, sessions=1)
     return {
         "window": window,
         "absolute_threshold": abs_thr,
         "relative_threshold": rel_thr,
         "latest_date": _date_str(_latest(frame)),
+        "context_date": _date_str(context_date),
         "rows": rows,
         "transitions": transitions,
         "axes": {
@@ -217,6 +330,146 @@ def rotation_payload(session: Session, window: int = 20, abs_thr: float = 0.0, r
             "bottom_right": "LOSING",
             "bottom_left": "LAGGING",
         },
+        "bubble_metrics": {
+            "market_cap": "Sum of current member market capitalisation (NPR)",
+            "turnover": "Latest-session member turnover (NPR)",
+            "volatility": "252-session annualised volatility of the sector index",
+            "advance_pct": "Share of observed members that advanced on the latest session",
+        },
+        "notes": [
+            "Market cap and turnover are latest-session context, not lookback-window aggregates.",
+            "Bubble metrics are disabled when the source has no observation for that sector.",
+        ],
+    }
+
+
+def rotation_history(session: Session, window: int = 20, sessions: int = 120) -> dict:
+    """Per-session relative-strength rank for every sector.
+
+    Relative return is computed on each sector's own observed dates; the series
+    are then aligned on the union calendar. A sector with no observation on a
+    date is *not ranked* that session (null), rather than being carried forward.
+    Rank 1 is the strongest excess return.
+    """
+    frame = load_index_frame(session)
+    if frame.empty:
+        return {"available": False, "reason": "No index observations."}
+    relative: dict[str, pd.Series] = {}
+    absolute: dict[str, pd.Series] = {}
+    for code in SECTOR_BY_CODE:
+        pair = _pair(frame, code)
+        if len(pair) <= window:
+            continue
+        sector = pair[sector_symbol(code)]
+        market = pair[NEPSE_INDEX_CODE]
+        sector_ret = sector / sector.shift(window) - 1.0
+        market_ret = market / market.shift(window) - 1.0
+        absolute[code] = sector_ret
+        relative[code] = sector_ret - market_ret
+    if not relative:
+        return {"available": False, "reason": "Insufficient index history for this window."}
+    rel_df = pd.DataFrame(relative).dropna(how="all").tail(sessions)
+    abs_df = pd.DataFrame(absolute).reindex(rel_df.index)
+    ranks = rel_df.rank(axis=1, ascending=False, method="min")
+    dates = [_date_str(d) for d in rel_df.index]
+
+    def clean(series: pd.Series) -> list[float | None]:
+        return [None if pd.isna(v) else float(v) for v in series]
+
+    return {
+        "available": True,
+        "window": window,
+        "sessions": len(rel_df),
+        "latest_date": _date_str(rel_df.index.max()) if len(rel_df) else None,
+        "dates": dates,
+        "series": [
+            {
+                "code": code,
+                "name": SECTOR_BY_CODE[code].name,
+                "relative": clean(rel_df[code]),
+                "absolute": clean(abs_df[code]) if code in abs_df else [],
+                "rank": [None if pd.isna(v) else int(v) for v in ranks[code]],
+            }
+            for code in rel_df.columns
+        ],
+        "method": (
+            "Rank is computed each session across sectors with an observation on that "
+            "date. Missing observations are not ranked and are not carried forward."
+        ),
+    }
+
+
+def compare_series(
+    session: Session,
+    codes: list[str],
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 2000,
+) -> dict:
+    """Date-aligned index levels for a multi-sector comparison."""
+    frame = load_index_frame(session)
+    if frame.empty:
+        return {"available": False, "reason": "No index observations."}
+    selected: list[tuple[str, str, str]] = []
+    for raw in codes:
+        code = raw.strip().upper()
+        if not code:
+            continue
+        if code == NEPSE_INDEX_CODE:
+            selected.append((NEPSE_INDEX_CODE, "NEPSE Index", NEPSE_INDEX_CODE))
+        elif code in SECTOR_BY_CODE:
+            selected.append((code, SECTOR_BY_CODE[code].name, sector_symbol(code)))
+        else:
+            raise KeyError(code)
+    if not selected:
+        raise ValueError("At least one sector code is required.")
+    columns = []
+    for _, _, symbol in selected:
+        if symbol not in frame.columns:
+            raise KeyError(symbol)
+        columns.append(symbol)
+
+    index = frame.index
+    if start:
+        index = index[index >= pd.Timestamp(start)]
+    if end:
+        index = index[index <= pd.Timestamp(end)]
+    if len(index) == 0:
+        return {"available": False, "reason": "No observations in the requested range."}
+    subset = frame.loc[index, columns]
+    if len(subset) > limit:
+        step = int(math.ceil(len(subset) / limit))
+        subset = subset.iloc[::step]
+        if subset.index[-1] != index[-1]:
+            subset = pd.concat([subset, frame.loc[[index[-1]], columns]])
+
+    series = []
+    for code, name, symbol in selected:
+        values = subset[symbol]
+        points = [
+            {"date": _date_str(d), "close": float(v)}
+            for d, v in zip(subset.index, values, strict=True)
+            if pd.notna(v)
+        ]
+        series.append(
+            {
+                "code": code,
+                "name": name,
+                "first_date": points[0]["date"] if points else None,
+                "last_date": points[-1]["date"] if points else None,
+                "points": points,
+            }
+        )
+    first = max((s["first_date"] for s in series if s["first_date"]), default=None)
+    return {
+        "available": True,
+        "start": _date_str(index.min()),
+        "end": _date_str(index.max()),
+        "common_start": first,
+        "series": series,
+        "notes": [
+            "Index levels are unadjusted. Normalisation, when shown, uses each series' first observation in the range.",
+        ],
     }
 
 
@@ -384,6 +637,14 @@ def breadth_summary(session: Session, sector_name: str | None = None) -> dict:
     history = (
         df.groupby("trade_date")[["advances", "declines", "unchanged"]].sum().reset_index().tail(260)
     )
+    frame = load_index_frame(session)
+    index_history: list[dict[str, Any]] = []
+    if NEPSE_INDEX_CODE in frame.columns:
+        index_series = frame[NEPSE_INDEX_CODE].dropna().tail(260)
+        index_history = [
+            {"date": _date_str(d), "close": float(v)}
+            for d, v in zip(index_series.index, index_series, strict=True)
+        ]
     return {
         "available": True,
         "latest_date": _date_str(df["trade_date"].max()),
@@ -400,6 +661,7 @@ def breadth_summary(session: Session, sector_name: str | None = None) -> dict:
             }
             for r in history.itertuples()
         ],
+        "index_history": index_history,
         "method": "Counts use observed security summaries only; a security with no row is not treated as unchanged.",
     }
 
@@ -511,20 +773,41 @@ def liquidity_summary(session: Session) -> dict:
     today["share"] = today["turnover"] / total if total else None
     rows = today.sort_values("turnover", ascending=False)
     history = df.pivot_table(index="trade_date", columns="sector_name", values="turnover", aggfunc="sum").tail(260)
-    return {
-        "available": True,
-        "latest_date": _date_str(latest),
-        "total_turnover": float(total),
-        "rows": [
+    context, _context_date = sector_context(session)
+    frame = load_index_frame(session)
+    rows_out = []
+    for r in rows.itertuples():
+        source = SECTOR_BY_NAME.get(str(r.sector_name).lower())
+        ret5 = ret20 = ret60 = None
+        if source is not None and not frame.empty:
+            pair = _pair(frame, source.code)
+            if not pair.empty:
+                values = pair[sector_symbol(source.code)]
+                ret5 = _ret(values, 5)
+                ret20 = _ret(values, 20)
+                ret60 = _ret(values, 60)
+        ctx = context.get(r.sector_name, {})
+        rows_out.append(
             {
                 "sector_name": r.sector_name,
                 "turnover": float(r.turnover) if pd.notna(r.turnover) else None,
                 "volume": float(r.volume) if pd.notna(r.volume) else None,
                 "securities": int(r.securities),
                 "share": float(r.share) if pd.notna(r.share) else None,
+                "return_5": ret5,
+                "return_20": ret20,
+                "return_60": ret60,
+                "market_cap": ctx.get("market_cap"),
+                "hhi": ctx.get("hhi"),
+                "effective_n": ctx.get("effective_n"),
+                "top1_share": ctx.get("top1_share"),
             }
-            for r in rows.itertuples()
-        ],
+        )
+    return {
+        "available": True,
+        "latest_date": _date_str(latest),
+        "total_turnover": float(total),
+        "rows": rows_out,
         "history": [
             {"date": _date_str(idx), **{k: (None if pd.isna(v) else float(v)) for k, v in row.items()}}
             for idx, row in history.iterrows()
@@ -599,7 +882,31 @@ def risk_summary(session: Session) -> dict:
                 "observations": len(pair),
             }
         )
-    return {"available": True, "latest_date": _date_str(_latest(frame)), "rows": rows}
+    matrix = None
+    codes = [code for code in SECTOR_BY_CODE if sector_symbol(code) in frame.columns]
+    matrix_columns = [sector_symbol(code) for code in codes] + [NEPSE_INDEX_CODE]
+    if len(codes) >= 2:
+        prices = frame[matrix_columns].tail(253)
+        returns = prices.pct_change().dropna(how="all")
+        corr = returns.corr(min_periods=30)
+        matrix = {
+            "codes": codes + [NEPSE_INDEX_CODE],
+            "labels": [SECTOR_BY_CODE[code].name for code in codes] + ["NEPSE"],
+            "values": [
+                [None if pd.isna(v) else round(float(v), 4) for v in row]
+                for row in corr.to_numpy()
+            ],
+            "window": 252,
+        }
+    return {
+        "available": True,
+        "latest_date": _date_str(_latest(frame)),
+        "rows": rows,
+        "correlation_matrix": matrix,
+        "notes": [
+            "Correlations use pairwise-complete daily returns over the last 252 sessions.",
+        ],
+    }
 
 
 def sector_risk(session: Session, code: str) -> dict:
@@ -610,6 +917,19 @@ def sector_risk(session: Session, code: str) -> dict:
     values = pair[sector_symbol(code)].tolist()
     s_ret = daily_returns(values)
     m_ret = daily_returns(pair[NEPSE_INDEX_CODE].tolist())
+    s_series = pd.Series(s_ret, index=pair.index, dtype="float64")
+    m_series = pd.Series(m_ret, index=pair.index, dtype="float64")
+    roll_corr = s_series.rolling(60, min_periods=40).corr(m_series)
+    roll_vol = s_series.rolling(20, min_periods=15).std() * math.sqrt(252)
+    rolling = [
+        {
+            "date": _date_str(d),
+            "correlation": None if pd.isna(c) else float(c),
+            "volatility": None if pd.isna(v) else float(v),
+        }
+        for d, c, v in zip(pair.index, roll_corr, roll_vol, strict=True)
+        if not (pd.isna(c) and pd.isna(v))
+    ][-260:]
     return {
         "available": True,
         "volatility": annualized_volatility(s_ret[-252:]),
@@ -619,6 +939,7 @@ def sector_risk(session: Session, code: str) -> dict:
         "correlation": correlation(s_ret[-252:], m_ret[-252:]),
         "var_95": var_historical(s_ret[-252:]),
         "cvar_95": cvar_historical(s_ret[-252:]),
+        "rolling": rolling,
         "drawdown_series": [
             {"date": _date_str(d), "drawdown": v}
             for d, v in zip(pair.index, drawdown_series(values), strict=False)

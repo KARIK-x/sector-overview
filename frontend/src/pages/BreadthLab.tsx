@@ -2,7 +2,7 @@ import type { EChartsOption } from 'echarts'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Waves } from 'lucide-react'
+import { ArrowUpRight, Download, Waves } from 'lucide-react'
 import { api } from '../lib/api'
 import type { BreadthSummary } from '../lib/api'
 import { Chart } from '../components/Chart'
@@ -14,11 +14,13 @@ import {
   Loading,
   Metric,
   PageHeader,
+  Segmented,
   StatusBadge,
 } from '../components/ui'
 import { useTheme } from '../lib/useTheme'
 import { axisStyle, baseOption, palette } from '../lib/chart'
-import { cn, dateLabel, dateShort, pct, toneClass } from '../lib/format'
+import { cn, dateLabel, dateTick, needsYear, pct, toneClass } from '../lib/format'
+import { downloadCsv } from '../lib/export'
 
 interface SectorBreadth {
   available: boolean
@@ -43,11 +45,18 @@ interface SectorBreadth {
   notes?: string[]
 }
 
-function ADHistory({ history }: { history: NonNullable<BreadthSummary['history']> }) {
+function ADHistory({
+  history,
+  sessions,
+}: {
+  history: NonNullable<BreadthSummary['history']>
+  sessions: number
+}) {
   const { isDark } = useTheme()
   const option = useMemo(() => {
     const p = palette(isDark)
     const axis = axisStyle(isDark, { split: true, labelSize: 9 })
+    const view = history.slice(-sessions)
     return {
       ...baseOption(isDark),
       grid: { left: 44, right: 48, top: 28, bottom: 38 },
@@ -59,9 +68,9 @@ function ADHistory({ history }: { history: NonNullable<BreadthSummary['history']
       },
       xAxis: {
         type: 'category',
-        data: history.map((h) => h.date),
+        data: view.map((h) => h.date),
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear(view.map((h) => h.date))), hideOverlap: true },
       },
       yAxis: [
         {
@@ -86,29 +95,143 @@ function ADHistory({ history }: { history: NonNullable<BreadthSummary['history']
           name: 'Advances',
           type: 'bar',
           stack: 'ad',
-          data: history.map((h) => h.advances),
+          data: view.map((h) => h.advances),
           itemStyle: { color: isDark ? 'rgba(79,209,176,0.72)' : 'rgba(14,124,102,0.7)' },
         },
         {
           name: 'Declines',
           type: 'bar',
           stack: 'ad',
-          data: history.map((h) => -h.declines),
+          data: view.map((h) => -h.declines),
           itemStyle: { color: isDark ? 'rgba(240,138,134,0.68)' : 'rgba(178,59,59,0.62)' },
         },
         {
           name: 'Advance share',
           type: 'line',
           yAxisIndex: 1,
-          data: history.map((h) => h.advance_pct),
+          data: view.map((h) => h.advance_pct),
           showSymbol: false,
           lineStyle: { width: 1.5, color: isDark ? '#e8b06a' : '#b06a14' },
           itemStyle: { color: isDark ? '#e8b06a' : '#b06a14' },
         },
       ],
     } as unknown as EChartsOption
-  }, [history, isDark])
-  return <Chart option={option} height={330} />
+  }, [history, sessions, isDark])
+  return <Chart option={option} height={330} exportName="breadth-advance-decline" />
+}
+
+/**
+ * Synchronises the index and the advance share on their common sessions. The
+ * index is rebased to 100 at the first shared date so direction, not level,
+ * is compared; no date is invented to fill a gap on either series.
+ */
+function ParticipationVsIndex({
+  history,
+  index,
+  sessions,
+}: {
+  history: NonNullable<BreadthSummary['history']>
+  index: NonNullable<BreadthSummary['index_history']>
+  sessions: number
+}) {
+  const { isDark } = useTheme()
+  const option = useMemo(() => {
+    const p = palette(isDark)
+    const axis = axisStyle(isDark, { split: true, labelSize: 9 })
+    const byDate = new Map(index.map((d) => [d.date, d.close]))
+    const rows = history
+      .map((h) => ({ date: h.date, share: h.advance_pct, close: byDate.get(h.date) ?? null }))
+      .filter((r): r is { date: string; share: number; close: number } => r.share !== null && r.close !== null)
+      .slice(-sessions)
+    const base = rows[0]?.close ?? null
+    const indexed = rows.map((r) => (base ? (r.close / base) * 100 : null))
+    // Daily breadth is genuinely noisy. A 10-session mean makes the divergence
+    // readable; the raw share stays visible at low opacity, never replaced.
+    const meanShare = rows.map((_, i) => {
+      const window = rows.slice(Math.max(0, i - 9), i + 1)
+      return window.reduce((sum, r) => sum + r.share, 0) / window.length
+    })
+    return {
+      ...baseOption(isDark),
+      grid: { left: 48, right: 50, top: 30, bottom: 38 },
+      legend: { ...baseOption(isDark).legend, top: 0, data: ['Advance share (10D mean)', 'Advance share', 'NEPSE (indexed)'] },
+      tooltip: {
+        ...baseOption(isDark).tooltip,
+        trigger: 'axis',
+        formatter: (params: unknown) => {
+          const items = params as Array<{ axisValue: string; seriesName: string; value: number | null; color: string }>
+          if (!items.length) return ''
+          const head = `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:${p.muted};margin-bottom:5px">${dateLabel(items[0].axisValue)}</div>`
+          return head + items.map((i) =>
+            `<div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">${i.seriesName}</span><b style="font-family:'IBM Plex Mono',monospace">${
+              i.value == null ? '—' : i.seriesName.startsWith('Advance share') ? `${(i.value * 100).toFixed(1)}%` : i.value.toFixed(1)
+            }</b></div>`).join('')
+        },
+      },
+      xAxis: {
+        type: 'category',
+        data: rows.map((r) => r.date),
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear(rows.map((r) => r.date))), hideOverlap: true },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          min: 0,
+          max: 1,
+          ...axis,
+          name: 'advance share',
+          nameTextStyle: { color: p.muted, fontSize: 9 },
+          axisLabel: { ...axis.axisLabel, formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
+        },
+        {
+          type: 'value',
+          ...axis,
+          splitLine: { show: false },
+          scale: true,
+          name: 'indexed = 100',
+          nameTextStyle: { color: p.muted, fontSize: 9 },
+          axisLabel: { ...axis.axisLabel, formatter: (v: number) => v.toFixed(0) },
+        },
+      ],
+      series: [
+        {
+          name: 'Advance share (10D mean)',
+          type: 'line',
+          data: meanShare,
+          showSymbol: false,
+          lineStyle: { width: 1.8, color: isDark ? '#4fd1b0' : '#0e7c66' },
+          itemStyle: { color: isDark ? '#4fd1b0' : '#0e7c66' },
+          areaStyle: { color: isDark ? 'rgba(79,209,176,0.10)' : 'rgba(14,124,102,0.08)' },
+          markLine: {
+            silent: true,
+            symbol: ['none', 'none'],
+            lineStyle: { color: p.faint, type: 'dashed', opacity: 0.6 },
+            label: { show: false },
+            data: [{ yAxis: 0.5 }],
+          },
+        },
+        {
+          name: 'Advance share',
+          type: 'line',
+          data: rows.map((r) => r.share),
+          showSymbol: false,
+          lineStyle: { width: 0.9, color: isDark ? '#4fd1b0' : '#0e7c66', opacity: 0.28 },
+          itemStyle: { color: isDark ? '#4fd1b0' : '#0e7c66' },
+        },
+        {
+          name: 'NEPSE (indexed)',
+          type: 'line',
+          yAxisIndex: 1,
+          data: indexed,
+          showSymbol: false,
+          lineStyle: { width: 1.3, color: p.muted, opacity: 0.9 },
+          itemStyle: { color: p.muted },
+        },
+      ],
+    } as unknown as EChartsOption
+  }, [history, index, sessions, isDark])
+  return <Chart option={option} height={320} exportName="breadth-vs-nepse" />
 }
 
 function SectorDetailBreadth({ sector }: { sector: string }) {
@@ -160,7 +283,7 @@ function SectorDetailBreadth({ sector }: { sector: string }) {
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <div>
           <div className="eyebrow mb-1">Members above their own moving average</div>
-          <Chart option={maOption} height={180} />
+          <Chart option={maOption} height={180} exportName="breadth-ma-participation" />
         </div>
         <div className="grid grid-cols-2 gap-3 self-center">
           <Metric label="New highs" value={data.new_highs ?? '—'} tone="pos" sub="252-session" />
@@ -176,6 +299,7 @@ function SectorDetailBreadth({ sector }: { sector: string }) {
 
 export default function BreadthLab() {
   const [sector, setSector] = useState<string>('')
+  const [sessions, setSessions] = useState(120)
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['breadth-summary'],
     queryFn: () => api.breadth() as Promise<BreadthSummary>,
@@ -232,8 +356,20 @@ export default function BreadthLab() {
                 eyebrow="Advance / decline"
                 title="Participation history"
                 subtitle="Bars are observed securities; the line is the advancing share. Missing securities are excluded from both."
+                actions={
+                  <Segmented
+                    options={[
+                      { value: 60, label: '60' },
+                      { value: 120, label: '120' },
+                      { value: 260, label: '260' },
+                    ]}
+                    value={sessions}
+                    onChange={setSessions}
+                    size="sm"
+                  />
+                }
               />
-              <ADHistory history={history} />
+              <ADHistory history={history} sessions={sessions} />
             </Card>
             <Card>
               <CardHeader eyebrow="Sector width" title="Net advances by sector" subtitle="Advances minus declines on the latest session" />
@@ -274,9 +410,42 @@ export default function BreadthLab() {
 
           <Card className="mt-4">
             <CardHeader
+              eyebrow="Participation divergence"
+              title="Does breadth confirm the index?"
+              subtitle="Advance share (left, raw and 10-session mean) against NEPSE rebased to 100 at the first common session (right). Divergence — index rising while participation falls — is a warning, not a timing signal."
+              actions={<StatusBadge status="VERIFIED" label={`${sessions} index sessions`} />}
+            />
+            {data.index_history && data.index_history.length > 20 ? (
+              <ParticipationVsIndex history={history} index={data.index_history} sessions={sessions} />
+            ) : (
+              <InfoNote>Index history is not available for alignment.</InfoNote>
+            )}
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader
               eyebrow="Cross-section"
               title="Breadth by sector"
               subtitle="A high advance share with few traded names is a thinner signal than a broad advance."
+              actions={
+                <button
+                  className="btn"
+                  onClick={() =>
+                    downloadCsv(
+                      `nepse-breadth-${data.latest_date ?? 'latest'}`,
+                      ['Sector', 'Advances', 'Declines', 'Unchanged', 'Traded', 'Advance share', 'Decline share', 'Net advances', 'A/D ratio'],
+                      [...rows]
+                        .sort((a, b) => (b.advance_pct ?? 0) - (a.advance_pct ?? 0))
+                        .map((r) => [
+                          r.sector_name, r.advances, r.declines, r.unchanged, r.traded,
+                          r.advance_pct, r.decline_pct, r.net_advances, r.ad_ratio,
+                        ]),
+                    )
+                  }
+                >
+                  <Download size={12} /> CSV
+                </button>
+              }
             />
             <div className="table-wrap">
               <table className="data-table">

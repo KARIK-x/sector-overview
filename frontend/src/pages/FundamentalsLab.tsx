@@ -2,7 +2,7 @@ import type { EChartsOption } from 'echarts'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, CircleAlert, FileText } from 'lucide-react'
+import { ArrowUpRight, CircleAlert, Download, FileText } from 'lucide-react'
 import { api } from '../lib/api'
 import type { FundamentalRow } from '../lib/api'
 import { Chart } from '../components/Chart'
@@ -10,6 +10,7 @@ import { Card, CardHeader, ErrorState, InfoNote, Loading, Metric, PageHeader, St
 import { useTheme } from '../lib/useTheme'
 import { axisStyle, baseOption, palette } from '../lib/chart'
 import { cn, compact, npr, num, pct } from '../lib/format'
+import { downloadCsv } from '../lib/export'
 
 export default function FundamentalsLab() {
   const { isDark } = useTheme()
@@ -28,34 +29,73 @@ export default function FundamentalsLab() {
   const peOption = useMemo(() => {
     const p = palette(isDark)
     const axis = axisStyle(isDark, { split: true, labelSize: 9 })
-    const sorted = [...available].filter((r) => r.aggregate_pe != null).sort((a, b) => (a.aggregate_pe ?? 0) - (b.aggregate_pe ?? 0))
+    const sorted = [...available]
+      .filter((r) => r.aggregate_pe != null)
+      .sort((a, b) => (a.aggregate_pe ?? 0) - (b.aggregate_pe ?? 0))
     return {
       ...baseOption(isDark),
-      grid: { left: 8, right: 44, top: 10, bottom: 24, containLabel: true },
+      grid: { left: 8, right: 52, top: 10, bottom: 24, containLabel: true },
       tooltip: {
         ...baseOption(isDark).tooltip,
-        trigger: 'axis',
+        trigger: 'item',
         formatter: (params: unknown) => {
-          const arr = params as Array<{ name: string; value: number; dataIndex: number }>
-          const d = arr[0]
-          const row = sorted[d.dataIndex]
-          return `<div><b>${d.name}</b><br/><span style="font-family:'IBM Plex Mono',monospace">P/E ${num(row?.aggregate_pe, 1)}</span><br/><span style="font-size:10px;color:${p.muted}">Coverage ${pct(row?.coverage, 0)}</span></div>`
+          const d = params as { data?: { meta?: FundamentalRow } }
+          const row = d.data?.meta
+          if (!row) return ''
+          return `<div><b>${row.name}</b><br/><span style="font-family:'IBM Plex Mono',monospace">P/E ${num(row.aggregate_pe, 1)}</span><br/><span style="font-size:10px;color:${p.muted}">Coverage ${pct(row.coverage, 0)}</span></div>`
         },
       },
-      xAxis: { type: 'value', ...axis, axisLabel: { ...axis.axisLabel, formatter: (v: number) => v.toFixed(0) } },
-      yAxis: { type: 'category', data: sorted.map((r) => r.name), inverse: true, ...axis, axisLine: { show: false } },
+      // A log axis is necessary: the highest P/E is ~26× the lowest. A dot plot
+      // is used instead of bars because a log axis has no meaningful zero and
+      // zero-based bars would be a false visual anchor.
+      xAxis: {
+        type: 'log',
+        min: 10,
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: number) => v.toFixed(0) },
+      },
+      yAxis: {
+        type: 'category',
+        data: sorted.map((r) => r.name),
+        inverse: true,
+        ...axis,
+        axisLine: { show: false },
+        axisLabel: {
+          ...axis.axisLabel,
+          formatter: (v: string) =>
+            v
+              .replace('Manufacturing And Processing', 'Manufacturing')
+              .replace('Non Life Insurance', 'Non-Life')
+              .replace('Hotels And Tourism', 'Hotels'),
+        },
+      },
       series: [
         {
-          type: 'bar',
-          data: sorted.map((r) => ({
-            value: r.aggregate_pe,
+          type: 'scatter',
+          data: sorted.map((r, i) => ({
+            value: [r.aggregate_pe, i],
+            name: r.name,
+            meta: r,
             itemStyle: {
-              color: (r.aggregate_pe ?? 0) > 30 ? (isDark ? 'rgba(232,176,106,0.8)' : 'rgba(176,106,20,0.75)') : isDark ? 'rgba(79,209,176,0.72)' : 'rgba(14,124,102,0.68)',
-              borderRadius: [0, 4, 4, 0],
+              color:
+                (r.aggregate_pe ?? 0) > 30
+                  ? isDark ? 'rgba(232,176,106,0.9)' : 'rgba(176,106,20,0.85)'
+                  : isDark ? 'rgba(79,209,176,0.9)' : 'rgba(14,124,102,0.85)',
+              borderColor: p.surface,
+              borderWidth: 1.5,
+            },
+            symbolSize: 10,
+            label: {
+              show: true,
+              position: 'right',
+              distance: 6,
+              formatter: () => num(r.aggregate_pe, 1),
+              color: p.muted,
+              fontSize: 9,
+              fontFamily: "'IBM Plex Mono', monospace",
             },
           })),
-          barWidth: 13,
-          label: { show: true, position: 'right', formatter: (q: unknown) => num((q as { value: number }).value, 1), color: p.muted, fontSize: 9 },
+          labelLayout: { hideOverlap: false },
         },
       ],
     } as unknown as EChartsOption
@@ -64,6 +104,16 @@ export default function FundamentalsLab() {
   const bubbleOption = useMemo(() => {
     const p = palette(isDark)
     const axis = axisStyle(isDark, { split: true })
+    const plotted = available.filter((r) => r.aggregate_pe != null && r.aggregate_roe != null)
+    // Only annotate the corners of the distribution. Labels for the dense
+    // middle are available on hover, and every row is in the table below.
+    const labelled = new Set<string>()
+    const byPe = [...plotted].sort((a, b) => (a.aggregate_pe ?? 0) - (b.aggregate_pe ?? 0))
+    byPe.slice(0, 2).forEach((r) => labelled.add(r.code))
+    byPe.slice(-2).forEach((r) => labelled.add(r.code))
+    const byRoe = [...plotted].sort((a, b) => (a.aggregate_roe ?? 0) - (b.aggregate_roe ?? 0))
+    byRoe.slice(0, 1).forEach((r) => labelled.add(r.code))
+    byRoe.slice(-1).forEach((r) => labelled.add(r.code))
     return {
       ...baseOption(isDark),
       grid: { left: 52, right: 26, top: 20, bottom: 44 },
@@ -77,6 +127,7 @@ export default function FundamentalsLab() {
           return `<div style="min-width:180px"><b>${r.name}</b><div style="height:1px;background:${p.line};margin:6px 0"></div>
           <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">P/E</span><b style="font-family:'IBM Plex Mono',monospace">${num(r.aggregate_pe, 1)}</b></div>
           <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">ROE</span><b style="font-family:'IBM Plex Mono',monospace">${pct(r.aggregate_roe)}</b></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Market cap</span><b style="font-family:'IBM Plex Mono',monospace">${npr(r.aggregate_market_cap)}</b></div>
           <div style="font-size:11px;display:flex;justify-content:space-between;gap:16px"><span style="color:${p.muted}">Coverage</span><b style="font-family:'IBM Plex Mono',monospace">${pct(r.coverage, 0)}</b></div></div>`
         },
       },
@@ -103,16 +154,19 @@ export default function FundamentalsLab() {
       series: [
         {
           type: 'scatter',
-          data: available
-            .filter((r) => r.aggregate_pe != null && r.aggregate_roe != null)
-            .map((r, i) => ({
+          data: plotted.map((r, i) => ({
               value: [r.aggregate_pe, r.aggregate_roe],
               name: r.name,
               meta: r,
-              symbolSize: 12 + (r.coverage ?? 0) * 22,
+              // Square-root scale keeps bubble *area* roughly proportional to
+              // aggregate market cap without letting Banks swallow the panel.
+              symbolSize: 9 + Math.sqrt(Math.max(0, r.aggregate_market_cap ?? 0) / 1e12) * 34,
               itemStyle: { color: isDark ? 'rgba(79,209,176,0.8)' : 'rgba(14,124,102,0.78)', borderColor: p.surface, borderWidth: 1.5 },
               // Alternate the anchor so labels fan out in four directions.
-              label: { position: (['right', 'top', 'left', 'bottom'] as const)[i % 4] },
+              label: {
+                show: labelled.has(r.code),
+                position: (['right', 'top', 'left', 'bottom'] as const)[i % 4],
+              },
             })),
           label: {
             show: true,
@@ -124,7 +178,7 @@ export default function FundamentalsLab() {
             textBorderColor: p.surface,
             textBorderWidth: 2.5,
           },
-          labelLayout: { hideOverlap: true },
+          labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' },
         },
       ],
     } as unknown as EChartsOption
@@ -154,11 +208,11 @@ export default function FundamentalsLab() {
           <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
             <Card>
               <CardHeader eyebrow="Valuation" title="Aggregate P/E by sector" subtitle="Market cap ÷ aggregate net profit, with losses in the denominator. Unavailable only when aggregate earnings are non-positive." />
-              <Chart option={peOption} height={340} />
+              <Chart option={peOption} height={340} exportName="fundamentals-valuation" />
             </Card>
             <Card>
-              <CardHeader eyebrow="Quality vs price" title="ROE against P/E" subtitle="Bubble size is fundamental coverage. P/E uses a log axis; accounting periods differ across members." />
-              <Chart option={bubbleOption} height={340} />
+              <CardHeader eyebrow="Quality vs price" title="ROE against P/E" subtitle="Bubble area scales with aggregate market capitalisation. P/E uses a log axis; accounting periods differ across members." />
+              <Chart option={bubbleOption} height={340} exportName="fundamentals-cap-profit" />
             </Card>
           </div>
 
@@ -167,6 +221,30 @@ export default function FundamentalsLab() {
               eyebrow="Cross-section"
               title="Sector fundamentals"
               subtitle="Aggregates are sums of the latest report per member; they are not averages of company ratios."
+              actions={
+                <button
+                  className="btn"
+                  onClick={() =>
+                    downloadCsv(
+                      'nepse-sector-fundamentals',
+                      ['sector', 'coverage', 'net_profit_npr', 'market_cap_npr', 'pe', 'pe_ex_loss', 'eps', 'roe', 'loss_makers'],
+                      rows.map((r) => [
+                        r.name,
+                        r.coverage,
+                        r.aggregate_profit,
+                        r.aggregate_market_cap,
+                        r.aggregate_pe,
+                        r.aggregate_pe_ex_negative,
+                        r.aggregate_eps,
+                        r.aggregate_roe,
+                        r.negative_earnings_symbols,
+                      ]),
+                    )
+                  }
+                >
+                  <Download size={12} /> CSV
+                </button>
+              }
             />
             <div className="table-wrap">
               <table className="data-table">
@@ -268,6 +346,9 @@ export default function FundamentalsLab() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-2 text-[10px] text-faint">
+                  Scroll for all {(selected.companies ?? []).length} reported members.
                 </div>
               </>
             ) : (

@@ -94,3 +94,31 @@ def test_var_cvar():
     rets = [(-0.05 if i < 5 else 0.01) for i in range(100)]
     assert var_historical(rets, 0.95) <= -0.04
     assert cvar_historical(rets, 0.95) <= var_historical(rets, 0.95)
+
+
+def test_macd_line_is_fast_minus_slow_ema():
+    from app.calculations import ema, macd
+
+    values = [100 + (i % 7) for i in range(80)]
+    line, signal_line, hist = macd(values, 12, 26, 9)
+    fast = ema(values, 12)
+    slow = ema(values, 26)
+    assert line[-1] == pytest.approx(fast[-1] - slow[-1])
+    assert signal_line[-1] is not None
+    assert hist[-1] == pytest.approx(line[-1] - signal_line[-1])
+    # The slow EMA needs 26 observations before the line is considered valid,
+    # and the signal line needs a further 9 valid MACD observations.
+    assert all(v is None for v in line[:25])
+    assert line[25] is not None
+    assert all(v is None for v in signal_line[:33])
+    assert signal_line[33] is not None
+
+
+def test_correlation_perfect_and_inverse():
+    up = [0.01, 0.02, -0.01, 0.03, 0.0]
+    assert correlation(up, up) == pytest.approx(1.0)
+    inverse = [-v for v in up]
+    assert correlation(up, inverse) == pytest.approx(-1.0)
+    # Mismatched lengths and constant series cannot produce a coefficient.
+    assert correlation(up, up[:3]) is None
+    assert correlation([0.01] * 5, up) is None

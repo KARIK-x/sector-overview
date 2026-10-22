@@ -7,6 +7,7 @@ import { Card, Loading } from './components/ui'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const SectorExplorer = lazy(() => import('./pages/SectorExplorer'))
 const RotationLab = lazy(() => import('./pages/RotationLab'))
+const Compare = lazy(() => import('./pages/Compare'))
 const BreadthLab = lazy(() => import('./pages/BreadthLab'))
 const LiquidityLab = lazy(() => import('./pages/LiquidityLab'))
 const RiskLab = lazy(() => import('./pages/RiskLab'))
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/sectors" element={<SectorExplorer />} />
           <Route path="/rotation" element={<RotationLab />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/breadth" element={<BreadthLab />} />
           <Route path="/liquidity" element={<LiquidityLab />} />
           <Route path="/risk" element={<RiskLab />} />

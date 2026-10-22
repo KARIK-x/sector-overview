@@ -45,17 +45,17 @@ export function quadrantColor(q: string | null | undefined, dark: boolean): stri
   }
 }
 
-export function heatColor(v: number | null | undefined, maxAbs: number, dark: boolean): string {
+export function heatColor(v: number | null | undefined, maxAbs: number, dark: boolean, opacity = 1): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return dark ? '#1a2522' : '#efece4'
   const t = Math.min(1, Math.abs(v) / (maxAbs || 1))
   if (v > 0) {
     const base = dark ? [20, 80, 66] : [14, 124, 102]
-    const alpha = 0.12 + 0.88 * Math.pow(t, 0.72)
+    const alpha = (0.12 + 0.88 * Math.pow(t, 0.72)) * opacity
     return `rgba(${base[0]}, ${base[1]}, ${base[2]}, ${alpha.toFixed(3)})`
   }
   if (v < 0) {
     const base = dark ? [150, 55, 55] : [178, 59, 59]
-    const alpha = 0.12 + 0.88 * Math.pow(t, 0.72)
+    const alpha = (0.12 + 0.88 * Math.pow(t, 0.72)) * opacity
     return `rgba(${base[0]}, ${base[1]}, ${base[2]}, ${alpha.toFixed(3)})`
   }
   return dark ? '#1a2522' : '#efece4'
@@ -101,4 +101,12 @@ export function axisStyle(dark: boolean, opts: { split?: boolean; labelSize?: nu
 export function tooltipFormatterNumber(value: number | null | undefined, digits = 1, suffix = '%') {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
   return `${value > 0 ? '+' : ''}${(value * 100).toFixed(digits)}${suffix}`
+}
+
+
+/** Categorical hues chosen to stay separable in both themes. */
+export function seriesColors(dark: boolean): string[] {
+  return dark
+    ? ['#4fd1b0', '#7ab3e8', '#e8b06a', '#f08a86', '#b69ce8', '#9fd08a', '#e8c978', '#6fc7d8', '#d79ac0', '#a8b6ae', '#8ec9a8', '#c8a2e0', '#d8a878']
+    : ['#0e7c66', '#2c5d8f', '#b06a14', '#b23b3b', '#6b4f9e', '#4a7c3f', '#8a6a12', '#1f7a8c', '#8e4a72', '#5c6a64', '#3f7a5c', '#7a4f9e', '#8a5a2b']
 }

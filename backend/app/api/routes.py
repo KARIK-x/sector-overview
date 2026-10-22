@@ -80,6 +80,38 @@ def rotation_trails(
     )
 
 
+@router.get("/rotation/history")
+def rotation_history(
+    window: int = Query(20, ge=2, le=252),
+    sessions: int = Query(120, ge=10, le=250),
+    session: Session = Depends(get_session),
+):
+    return cache.memo(
+        f"rotation-history:{window}:{sessions}",
+        TTL,
+        lambda: analytics.rotation_history(session, window, sessions),
+    )
+
+
+@router.get("/compare")
+def compare(
+    codes: str = Query(..., min_length=2, max_length=200),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    session: Session = Depends(get_session),
+):
+    try:
+        return cache.memo(
+            f"compare:{codes}:{start}:{end}",
+            TTL,
+            lambda: analytics.compare_series(session, codes.split(","), start, end),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown series: {exc.args[0]}") from exc
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/sectors/{code}")
 def sector_detail(code: str, session: Session = Depends(get_session)):
     resolved = code.upper()

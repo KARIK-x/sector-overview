@@ -73,6 +73,17 @@ export interface RotationRow {
   latest_date: string | null
   observations: number
   status: string
+  volatility?: number | null
+  /** Latest-session context used for bubble sizing and tooltips. */
+  market_cap?: number | null
+  turnover?: number | null
+  turnover_share?: number | null
+  advance_pct?: number | null
+  traded?: number | null
+  hhi?: number | null
+  effective_n?: number | null
+  top1_share?: number | null
+  context_date?: string | null
 }
 
 export interface RotationPayload {
@@ -84,6 +95,46 @@ export interface RotationPayload {
   transitions: TransitionEvent[]
   axes: { x: string; y: string }
   quadrants: Record<string, Quadrant>
+  context_date?: string | null
+  bubble_metrics?: Record<string, string>
+  notes?: string[]
+}
+
+export interface RotationHistorySeries {
+  code: string
+  name: string
+  relative: Array<number | null>
+  absolute: Array<number | null>
+  rank: Array<number | null>
+}
+
+export interface RotationHistoryPayload {
+  available: boolean
+  reason?: string
+  window: number
+  sessions: number
+  latest_date: string | null
+  dates: string[]
+  series: RotationHistorySeries[]
+  method?: string
+}
+
+export interface CompareSeries {
+  code: string
+  name: string
+  first_date: string | null
+  last_date: string | null
+  points: Array<{ date: string; close: number }>
+}
+
+export interface ComparePayload {
+  available: boolean
+  reason?: string
+  start?: string
+  end?: string
+  common_start?: string | null
+  series: CompareSeries[]
+  notes?: string[]
 }
 
 export interface TransitionEvent {
@@ -161,6 +212,7 @@ export interface BreadthSummary {
   latest_date?: string
   rows?: BreadthRow[]
   history?: BreadthHistoryPoint[]
+  index_history?: Array<{ date: string; close: number }>
   method?: string
 }
 
@@ -170,6 +222,13 @@ export interface LiquidityRow {
   volume: number | null
   securities: number
   share: number | null
+  return_5?: number | null
+  return_20?: number | null
+  return_60?: number | null
+  market_cap?: number | null
+  hhi?: number | null
+  effective_n?: number | null
+  top1_share?: number | null
 }
 
 export interface LiquiditySummary {
@@ -195,11 +254,20 @@ export interface RiskRow {
   observations: number
 }
 
+export interface CorrelationMatrix {
+  codes: string[]
+  labels: string[]
+  values: Array<Array<number | null>>
+  window: number
+}
+
 export interface RiskSummary {
   available: boolean
   reason?: string
   latest_date?: string
   rows?: RiskRow[]
+  correlation_matrix?: CorrelationMatrix | null
+  notes?: string[]
 }
 
 export interface FundamentalRow {
@@ -360,6 +428,10 @@ export const api = {
     getJson<RotationPayload>('/rotation', { window, abs_threshold: abs, rel_threshold: rel }, signal),
   trails: (window: number, sessions: number, signal?: AbortSignal) =>
     getJson<TrailsPayload>('/rotation/trails', { window, sessions }, signal),
+  rotationHistory: (window: number, sessions: number, signal?: AbortSignal) =>
+    getJson<RotationHistoryPayload>('/rotation/history', { window, sessions }, signal),
+  compare: (codes: string[], start?: string, end?: string, signal?: AbortSignal) =>
+    getJson<ComparePayload>('/compare', { codes: codes.join(','), start, end }, signal),
   heatmap: () => getJson<HeatmapPayload>('/heatmap'),
   sector: (code: string) => getJson<SectorDetail>(`/sectors/${code}`),
   breadth: (sector?: string) => getJson<BreadthSummary | Record<string, unknown>>('/breadth', { sector }),

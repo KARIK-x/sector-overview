@@ -46,7 +46,9 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: 'ss01' on, 'cv05' on;
+  /* Do not set global font-feature-settings here: inherited stylistic sets
+     trigger a Chromium shaping-cache bug that paints IBM Plex Mono labels with
+     another string's glyphs. Features are opted into per-element instead. */
 }
 
 body::before {
@@ -100,6 +102,26 @@ body::before {
 
   .card-pad {
     @apply p-4 sm:p-5;
+  }
+
+  /* Chart export control: quiet until the chart is hovered or focused, so it
+     never competes with the data, but always reachable by keyboard. */
+  .chart-export {
+    @apply absolute right-1 top-1 z-10 inline-flex items-center gap-1 rounded-md border px-1.5 py-1 font-mono text-[9px] uppercase tracking-wider text-muted transition-opacity;
+    border-color: var(--line);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    opacity: 0;
+  }
+  .chart-frame:hover .chart-export,
+  .chart-export:focus-visible {
+    opacity: 1;
+  }
+  .chart-export:hover {
+    color: var(--ink);
+    border-color: var(--faint);
+  }
+  @media (hover: none) {
+    .chart-export { opacity: 0.7; }
   }
 
   .eyebrow {

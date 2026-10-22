@@ -4,13 +4,23 @@ import { Chart } from './Chart'
 import type { RotationRow, TrailPoint } from '../lib/api'
 import { axisStyle, baseOption, palette, quadrantColor } from '../lib/chart'
 import { useTheme } from '../lib/useTheme'
-import { cn, signedPct } from '../lib/format'
+import { cn, npr, signedPct } from '../lib/format'
 
 const QUADRANT_LABELS: Array<{ key: string; label: string; pos: 'tl' | 'tr' | 'bl' | 'br' }> = [
   { key: 'ADVANCING', label: 'Advancing', pos: 'tl' },
   { key: 'WINNING', label: 'Winning', pos: 'tr' },
   { key: 'LAGGING', label: 'Lagging', pos: 'bl' },
   { key: 'LOSING', label: 'Losing', pos: 'br' },
+]
+
+export type BubbleMetric = 'none' | 'market_cap' | 'turnover' | 'volatility' | 'advance_pct'
+
+export const BUBBLE_METRICS: Array<{ value: BubbleMetric; label: string }> = [
+  { value: 'none', label: 'Equal' },
+  { value: 'market_cap', label: 'Market cap' },
+  { value: 'turnover', label: 'Turnover' },
+  { value: 'volatility', label: 'Volatility' },
+  { value: 'advance_pct', label: 'Breadth' },
 ]
 
 export function RotationQuadrant({
@@ -21,6 +31,8 @@ export function RotationQuadrant({
   selected,
   onSelect,
   compact = false,
+  bubbleMetric = 'none',
+  exportName,
 }: {
   rows: RotationRow[]
   trails?: Record<string, TrailPoint[]>
@@ -29,12 +41,15 @@ export function RotationQuadrant({
   selected?: string | null
   onSelect?: (code: string) => void
   compact?: boolean
+  bubbleMetric?: BubbleMetric
+  exportName?: string
 }) {
   const { isDark } = useTheme()
 
   const option = useMemo<EChartsOption>(() => {
     const p = palette(isDark)
     const pts = rows.filter((r) => r.absolute_strength !== null && r.relative_strength !== null)
+    const visible = new Set(pts.map((r) => r.code))
     const allX = pts.map((r) => r.absolute_strength as number)
     const allY = pts.map((r) => r.relative_strength as number)
     if (showTrails && trails) {
@@ -53,7 +68,7 @@ export function RotationQuadrant({
     const axis = axisStyle(isDark, { split: true, labelSize: 10 })
 
     const trailSeries = showTrails && trails
-      ? Object.entries(trails).map(([code, points]) => {
+      ? Object.entries(trails).filter(([code]) => visible.has(code)).map(([code, points]) => {
           const row = rows.find((r) => r.code === code)
           const color = quadrantColor(row?.quadrant, isDark)
           const last = points[points.length - 1]
@@ -64,7 +79,7 @@ export function RotationQuadrant({
             symbol: 'none',
             silent: true,
             animation: false,
-            lineStyle: { width: 1.25, color, opacity: 0.42 },
+            lineStyle: { width: 1, color, opacity: 0.22 },
             emphasis: { disabled: true },
             tooltip: { show: false },
             z: 1,
@@ -92,6 +107,24 @@ export function RotationQuadrant({
       LAGGING: 'left',
     }
 
+    // Bubble size uses a square-root scale so area — not radius — is roughly
+    // proportional to the metric. Sectors with no observation keep the neutral
+    // radius and are called out in the tooltip rather than silently sized at 0.
+    const metricValues = bubbleMetric === 'none'
+      ? []
+      : pts.map((r) => r[bubbleMetric]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    const metricMin = metricValues.length ? Math.min(...metricValues) : 0
+    const metricMax = metricValues.length ? Math.max(...metricValues) : 0
+    const bubbleSize = (r: RotationRow): number => {
+      const neutral = compact ? 13 : 16
+      if (bubbleMetric === 'none' || metricValues.length < 2 || metricMax === metricMin) return neutral
+      const raw = r[bubbleMetric]
+      if (typeof raw !== 'number' || !Number.isFinite(raw)) return neutral
+      const t = Math.sqrt(Math.min(1, Math.max(0, (raw - metricMin) / (metricMax - metricMin))))
+      const base = 9 + t * 27
+      return compact ? base - 3 : base
+    }
+
     const scatterData = pts.map((r) => ({
       name: r.name,
       value: [r.absolute_strength, r.relative_strength],
@@ -103,7 +136,7 @@ export function RotationQuadrant({
         shadowBlur: selected === r.code ? 14 : 0,
         shadowColor: quadrantColor(r.quadrant, isDark),
       },
-      symbolSize: compact ? 13 : selected === r.code ? 21 : 16,
+      symbolSize: selected === r.code ? bubbleSize(r) + 5 : bubbleSize(r),
       label: { position: labelAnchor[r.quadrant ?? ''] ?? 'top', distance: 7 },
       meta: r,
     }))
@@ -121,6 +154,22 @@ export function RotationQuadrant({
       // labels with the mark area (rather than a free-floating graphic) keeps
       // them aligned with the axes at every container size.
       legend: { show: false },
+      // Wheel/pinch zoom and drag-pan are enabled on both axes together so the
+      // quadrant cross stays a cross. Remounting the chart resets the view.
+      dataZoom: compact
+        ? []
+        : [
+            {
+              type: 'inside',
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              filterMode: 'none',
+              zoomOnMouseWheel: true,
+              moveOnMouseMove: true,
+              moveOnMouseWheel: false,
+              preventDefaultMouseMove: true,
+            },
+          ],
       xAxis: {
         type: 'value',
         min: -lim,
@@ -140,7 +189,7 @@ export function RotationQuadrant({
         type: 'value',
         min: -lim,
         max: lim,
-        name: compact ? '' : 'Relative strength vs NEPSE  →',
+        name: compact ? '' : 'Relative strength vs NEPSE  ↑',
         nameLocation: 'middle',
         nameGap: compact ? 26 : 38,
         nameTextStyle: { color: p.muted, fontSize: 10, fontFamily: "'IBM Plex Mono', monospace" },
@@ -166,6 +215,14 @@ export function RotationQuadrant({
             <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Relative</span><b style="font-family:'IBM Plex Mono',monospace">${signedPct(r.relative_strength)}</b></div>
             <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">RS ratio</span><b style="font-family:'IBM Plex Mono',monospace">${r.rs_ratio?.toFixed(4) ?? '—'}</b></div>
             <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">20-session</span><b style="font-family:'IBM Plex Mono',monospace">${signedPct(r.return_20)}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Volatility (252)</span><b style="font-family:'IBM Plex Mono',monospace">${r.volatility == null ? '—' : `${(r.volatility * 100).toFixed(1)}%`}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Market cap</span><b style="font-family:'IBM Plex Mono',monospace">${npr(r.market_cap)}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Turnover</span><b style="font-family:'IBM Plex Mono',monospace">${npr(r.turnover)}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Advancing members</span><b style="font-family:'IBM Plex Mono',monospace">${r.advance_pct == null ? '—' : `${(r.advance_pct * 100).toFixed(0)}%`}${r.traded ? ` of ${r.traded}` : ''}</b></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px"><span style="color:${p.muted}">Turnover HHI</span><b style="font-family:'IBM Plex Mono',monospace">${r.hhi == null ? '—' : r.hhi.toFixed(3)}</b></div>
+            <div style="height:1px;background:${p.line};margin:7px 0"></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:10px;color:${p.muted}"><span>Latest sector obs.</span><span style="font-family:'IBM Plex Mono',monospace">${r.latest_date ?? '—'}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:18px;font-size:10px;color:${p.muted}"><span>History · status</span><span style="font-family:'IBM Plex Mono',monospace">${r.observations} · ${r.status}</span></div>
           </div>`
         },
       },
@@ -180,13 +237,30 @@ export function RotationQuadrant({
             itemStyle: { borderWidth: 2.5 },
             label: { show: true, formatter: (param: unknown) => (param as { name: string }).name },
           },
+          labelLayout: { hideOverlap: true },
           label: {
             show: !compact,
             position: 'top',
             distance: 6,
             formatter: (param: unknown) => {
               const r = (param as { data?: { meta?: RotationRow } }).data?.meta
-              return r ? r.name.replace('Manufacturing And Processing', 'Manufacturing').replace('Non Life Insurance', 'Non-Life') : ''
+              if (!r) return ''
+              const short: Record<string, string> = {
+                BANKING: 'Banks',
+                DEVBANK: 'Dev Banks',
+                FINANCE: 'Finance',
+                HOTELS: 'Hotels',
+                HYDROPOWER: 'Hydro',
+                INVESTMENT: 'Investment',
+                LIFEINS: 'Life Ins.',
+                MANUFACTURE: 'Manufacturing',
+                MICROFINANCE: 'Microfinance',
+                MUTUALFUND: 'Mutual Fund',
+                NONLIFE: 'Non-Life',
+                OTHERS: 'Others',
+                TRADING: 'Trading',
+              }
+              return short[r.code] ?? r.name
             },
             color: p.muted,
             fontSize: 9,
@@ -271,7 +345,7 @@ export function RotationQuadrant({
 
   return (
     <div className="relative">
-      <Chart option={option} height={height} onEvents={onEvents} />
+      <Chart option={option} height={height} onEvents={onEvents} exportName={exportName} />
       {!compact && (
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] text-muted">
           {QUADRANT_LABELS.map((q) => (

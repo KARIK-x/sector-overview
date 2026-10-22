@@ -13,7 +13,7 @@
 | `BLOCKED` | Cannot be done with the verified data/hosting available; the app says so instead of faking it |
 
 `IMPLEMENTED` is deliberately weaker than `TESTED-PASS`. Nothing in this document claims a browser run
-that was not performed.
+that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 
 ---
 
@@ -21,160 +21,132 @@ that was not performed.
 
 | Area | Status | Note |
 | --- | --- | --- |
-| Data ingestion (5 stages) | `TESTED-PASS` | 41,509 index rows, 433,817 summaries, 307 fundamental symbols |
-| Calculations package | `TESTED-PASS` | 37 unit tests across returns, rotation, breadth, concentration, risk, fundamentals, factors |
-| API (17 endpoints) | `TESTED-PASS` | 21 API tests; sanitised JSON; 90 s cache; gzip |
-| 11 pages + 404 | `TESTED-PASS` | 12-route Chromium sweep, 0 console errors |
-| Rotation Lab contract | `TESTED-PASS` | Unit + API + browser; lookback change verified |
-| Breadth / Liquidity / Risk / Fundamentals labs | `TESTED-PASS` | Rendered with real data; numbers reconciled |
-| Research Lab | `TESTED-PASS` | Scores, weights, transitions, illustrative backtest |
-| Data Quality Center | `TESTED-PASS` | Completeness-aware statuses, source register, run log |
-| Methodology | `TESTED-PASS` | Rendered; content mirrors `ANALYTICS_METHODOLOGY.md` |
-| Command palette | `TESTED-PASS` | ⌘K, ranked search, Enter navigation |
-| Theme + mobile + responsive layout | `TESTED-PASS` | Dark mode persisted; 390 px with no page overflow |
-| Postgres path | `NOT-TESTED` | No server available; dialect-neutral models |
-| Docker build | `NOT-TESTED` | Dockerfile written; not built here |
-| Public deployment | `NOT-TESTED` | No provider account provisioned |
-| Cross-browser (Firefox/Safari) | `NOT-TESTED` | Chromium only |
-| Accessibility audit with AT | `NOT-TESTED` | Table equivalents exist; no screen-reader session |
-| Load / concurrency test | `NOT-TESTED` | Single-user local run |
-| Corporate events feed | `BLOCKED` | No verified source; page reports UNAVAILABLE |
-| Historical sector membership | `BLOCKED` | Not published; current membership applied to history |
-| Full financial statements | `BLOCKED` | Revenue/assets/liabilities absent from the verified feed |
-| Official NEPSE API | `BLOCKED` | HTTP 401; authentication not bypassed |
-
-**Counts:** 15 `TESTED-PASS` areas, 5 `NOT-TESTED`, 4 `BLOCKED`, 0 `TESTED-FAIL`.
-
----
-
-## 2. Backend
-
-### 2.1 Ingestion — `TESTED-PASS`
-
-| Stage | Result in this build |
-| --- | --- |
-| Sectors and index metadata | 13 sectors + NEPSE |
-| Index observations | 41,509 rows (34,896 sector + 6,613 NEPSE). Sector series begin between 2011-03-20 and 2021-02-28; NEPSE from 1997-07-20. All end 2026-10-16 |
-| Securities and membership | 467 instruments, 331 memberships, 343 with market cap |
-| Daily summaries | 433,817 rows across 285 symbols, 1995-07-20 → 2026-10-16 |
-| Fundamentals | 4,840 reports across 307 symbols |
-
-All five stages completed. The run log holds **15 rows: 13 SUCCESS and 2 FAILED** from the development
-session — a `float.strip` bug in the securities stage and a fundamentals unique-constraint bug. Both
-were fixed and rerun successfully; the failures were deliberately left in the log so the Data Quality
-Center shows real operational history rather than an invented all-green record. The fundamentals stage
-was rerun twice against the final build (4,840 rows each time, no duplicates), which verifies
-replace-and-reload idempotency. Raw responses cached (8.4 MB), SQLite 128 MB.
-
-### 2.2 Calculations — `TESTED-PASS`
-
-`backend/app/calculations/` is independent of HTTP and the database. Every function returns `None`
-for missing input rather than zero. Tests: 12 (core), 12 (rotation), 6 (breadth), 7 (analytics units).
-
-Verified contracts:
-
-* quadrant boundaries (`x=0`, `y=0` cases pinned);
-* cumulative return by session position;
-* missing ≠ unchanged in breadth;
-* aggregate P/E includes losses; ex-loss variant reported separately;
-* implausible book values excluded and counted; unverifiable ones included with `†`;
-* factor weights renormalised over available factors, missing ≠ worst.
-
-### 2.3 API — `TESTED-PASS`
-
-17 endpoints, all `GET`, read-only. 21 tests cover health, meta, axis contract, sector detail, 404,
-methodology, 11 endpoints' JSON validity/sanitisation, factor and research payload shapes, data
-quality status, and the `clean_json` serialiser.
-
-Runtime facts: in-process TTL 90 s; gzip on responses ≥ 1 kB (dashboard 47 kB → 10 kB); cold
-dashboard 1.31 s, warm 11 ms; no `NaN`/`Infinity` on any endpoint.
+| Data ingestion (5 stages) | `TESTED-PASS` | 41,509 index rows, 433,817 summaries, 4,840 fundamental reports |
+| Calculations package | `TESTED-PASS` | 14 unit tests across returns, rotation boundaries, risk, breadth, concentration, MACD/correlation |
+| API contract | `TESTED-PASS` | 25 API tests; 19 read-only endpoints |
+| Type-check / production build | `TESTED-PASS` | `tsc -b` clean; Vite build succeeded |
+| Dashboard | `TESTED-PASS` | Rendered + interactions + screenshot; 3 chart surfaces |
+| Sector Explorer | `TESTED-PASS` | Sector switching, ranges, exports, screenshot |
+| Rotation Lab | `TESTED-PASS` | Lookbacks, bubble metric, filters, timeline, thresholds, exports, screenshot |
+| Sector Comparison | `TESTED-PASS` | Presets, date inputs, series chips, modes, reset, exports, screenshot |
+| Breadth Lab | `TESTED-PASS` | 60/120/260 windows, deep dive, export, screenshot |
+| Liquidity Lab | `TESTED-PASS` | Horizon control, sector click, table, export, screenshot |
+| Risk Lab | `TESTED-PASS` | Sector select, matrix, drawdown/rolling charts, exports, screenshot |
+| Fundamentals Lab | `TESTED-PASS` | Member selection, next sector, CSV, chart exports, screenshot |
+| Quantitative Research Lab | `TESTED-PASS` | Weight sliders, reset, transition matrix, backtest, screenshot |
+| Data Quality Center | `TESTED-PASS` | Re-check action, inventory/coverage, screenshot |
+| Events & Research | `BLOCKED` | Page renders and explains why no verified events feed exists |
+| Methodology | `TESTED-PASS` | 12 sections, formulas, screenshot |
+| Theme / command palette / mobile drawer / 404 | `TESTED-PASS` | Firefox + Chrome; screenshots for dark, mobile and 404 |
+| CSV / PNG exports | `TESTED-PASS` | Real downloads inspected: non-empty files, expected headers/PNG dimensions |
+| Cross-browser | `TESTED-PASS` (Chrome 36, Firefox 76) · `BLOCKED` (WebKit) | Playwright WebKit crashes with a host `Bus error`; Safari remains unverified |
+| PostgreSQL path | `NOT-TESTED` | No PostgreSQL server in this environment; SQLite is the live store |
+| Docker image | `NOT-TESTED` | Dockerfile present; image not built here |
+| Public deployment | `NOT-TESTED` | Free-tier options researched; no account/credentials used |
+| Screen-reader / WCAG audit | `NOT-TESTED` | Keyboard palette and focus styles implemented; no VoiceOver/NVDA run |
+| Load / soak testing | `NOT-TESTED` | No concurrent-user benchmark run |
 
 ---
 
-## 3. Frontend
+## 2. Pages and routes
 
-### 3.1 Pages
-
-| Page | Route | Status | Rendered content |
+| Route | Page | Status | Main evidence |
 | --- | --- | --- | --- |
-| Dashboard | `/` | `TESTED-PASS` | KPI strip, rotation map, horizon heatmap, leadership board, breadth, turnover treemap, risk scatter, freshness |
-| Sector Explorer | `/sectors` | `TESTED-PASS` | Sub-index history with MAs + zoom, technicals, sector breadth, traded value, member table |
-| Rotation Lab | `/rotation` | `TESTED-PASS` | Quadrant + trails, lookback/threshold controls, census, table, recent crossings |
-| Breadth Lab | `/breadth` | `TESTED-PASS` | Participation history, MA breadth, sector table, deep dive |
-| Liquidity Lab | `/liquidity` | `TESTED-PASS` | Stacked turnover, donut, table, concentration panel |
-| Risk Lab | `/risk` | `TESTED-PASS` | Risk/return bubbles, volatility ranking, risk table, drawdown anatomy |
-| Fundamentals Lab | `/fundamentals` | `TESTED-PASS` | Aggregate P/E, ROE vs P/E (log x), sector table, member filings |
-| Events & Research | `/events` | `TESTED-PASS` (as an empty state) | Explicit UNAVAILABLE disclosure; no fabricated rows |
-| Quantitative Research Lab | `/research` | `TESTED-PASS` | Factor scores, weight sliders, attribution, persistence heatmap, backtest |
-| Data Quality Center | `/data-quality` | `TESTED-PASS` | Coverage with completeness, inventory, classification, runs, source register |
-| Methodology | `/methodology` | `TESTED-PASS` | Ten sections, formulas, status vocabulary, limitations |
-| Not found | any unknown | `TESTED-PASS` | Designed 404 |
+| `/` | Dashboard | `TESTED-PASS` | `artifacts/screenshots/01-dashboard.png` |
+| `/rotation` | Rotation Lab | `TESTED-PASS` | `02-rotation-lab.png` |
+| `/compare` | Sector Comparison | `TESTED-PASS` | `03-sector-comparison.png` |
+| `/breadth` | Breadth Lab | `TESTED-PASS` | `04-breadth-lab.png` |
+| `/liquidity` | Liquidity Lab | `TESTED-PASS` | `05-liquidity-lab.png` |
+| `/risk` | Risk Lab | `TESTED-PASS` | `06-risk-lab.png` |
+| `/fundamentals` | Fundamentals Lab | `TESTED-PASS` | `07-fundamentals-lab.png` |
+| `/sectors` | Sector Explorer | `TESTED-PASS` | `08-sector-explorer.png` |
+| `/research` | Quantitative Research Lab | `TESTED-PASS` | `09-quantitative-research.png` |
+| `/data-quality` | Data Quality Center | `TESTED-PASS` | `10-data-quality.png` |
+| `/events` | Events & Research | `BLOCKED` | `11-events-research.png` |
+| `/methodology` | Methodology | `TESTED-PASS` | `12-methodology.png` |
+| any unknown path | Not found | `TESTED-PASS` | `16-not-found.png` |
 
-### 3.2 Design system and shell — `TESTED-PASS`
-
-* Paper/ink palette with teal accent; light and dark themes (persisted, system default, applied before
-  paint).
-* Instrument Serif / IBM Plex Sans / IBM Plex Mono; tabular numerals.
-* Sidebar (desktop) → drawer (mobile); skip link; visible focus rings; ARIA labels on icon buttons.
-* Command palette (`⌘K`/`Ctrl+K`) with ranked label-first search and keyboard navigation.
-* Cards reflow 4 → 2 → 1 column; tables and the mobile heatmap scroll inside their containers.
-* Lazy routes with a single `Suspense` fallback; ECharts registered through `echarts/core`.
-
-### 3.3 Interactions verified in the browser
-
-| Behaviour | Result |
-| --- | --- |
-| Rotation lookback 20 → 5 | Table header and values recomputed |
-| Trail replay 25 → 50 | `aria-selected` moves; chart redraws |
-| Sector switch | URL `?code=HYDROPOWER`, 3 charts re-render |
-| Heatmap cell click | Navigates to `/sectors?code=HYDROPOWER` |
-| Factor weight change | Score 91.4 → 92.4, total weight 125 shown |
-| Command palette | `risk` → Risk Lab first; Enter → `/risk` |
-| Theme toggle | `html.dark`, background `rgb(11,17,16)` |
-| Mobile drawer | Opens, body scroll locked |
-| Mobile overflow | scroll width = client width = 380 px |
+Twelve content pages plus a 404 route. `Sector Comparison` is an addition beyond the eleven pages named
+in the original brief; it is the natural home for the multi-series line chart that the dashboard
+deliberately does not carry.
 
 ---
 
-## 4. What is deliberately not built
+## 3. Backend surface
 
-| Item | Status | Reason |
+**19 endpoints**, all `GET`, all read-only, cached in-process for 90 s.
+
+| Endpoint | Status | Notes |
 | --- | --- | --- |
-| Stock screener / ranking | Out of scope | Sector-only product; minimal summaries exist only for breadth |
-| Candlestick / OHLC charts | Out of scope | OHLC is not stored |
-| Price targets, buy/sell signals, forecasts | Out of scope | Not supported by the data or the evidence |
-| Authentication, watchlists, alerts, exports | Not built | Public read-only tool; free hosting |
-| ML / regime detection / sentiment | Not built | Would be unvalidated with 13 series and a short history |
-| Corporate events calendar | `BLOCKED` | No verified public feed |
-| Intraday / real-time | `BLOCKED` | Official API requires auth |
-| Historical constituents | `BLOCKED` | Not published |
-| Revenue/asset/leverage analytics | `BLOCKED` | Fields absent from the feed |
+| `/api/health`, `/api/meta` | `TESTED-PASS` | Smoke checks in API tests |
+| `/api/sectors`, `/api/sectors/{code}` | `TESTED-PASS` | 13 sectors; unknown code → 404 |
+| `/api/dashboard` | `TESTED-PASS` | Market, rotation, heatmap, breadth, liquidity, risk, leaders, freshness |
+| `/api/heatmap` | `TESTED-PASS` | 1/5/10/20/60/120/252-session matrix |
+| `/api/rotation` | `TESTED-PASS` | Window, thresholds, census, transitions |
+| `/api/rotation/trails` | `TESTED-PASS` | Path ordered by date; tests added |
+| `/api/rotation/history` | `TESTED-PASS` | 120-session relative-rank history; tests added |
+| `/api/compare` | `TESTED-PASS` | Common start, aligned series, 404 for unknown code; tests added |
+| `/api/breadth` | `TESTED-PASS` | Market + sector drill-down; 260-session history/index join |
+| `/api/liquidity` | `TESTED-PASS` | Turnover, HHI, top names, 5/20/60 returns |
+| `/api/risk` | `TESTED-PASS` | 14×14 correlation matrix, rolling 60-session correlation, rolling 20-session volatility |
+| `/api/fundamentals` | `TESTED-PASS` | Aggregates, members, validation notes |
+| `/api/factors` | `TESTED-PASS` | Six configurable weights, coverage, missing factors |
+| `/api/research` | `TESTED-PASS` | Transition matrix, illustrative backtest |
+| `/api/events` | `BLOCKED` | Returns `UNAVAILABLE` with reasons; no invented calendar |
+| `/api/data-quality` | `TESTED-PASS` | Inventory, coverage, classification, runs |
+| `/api/methodology` | `TESTED-PASS` | Structured formula content |
 
 ---
 
-## 5. Reproduce this status
+## 4. Feature matrix
 
-```bash
-# backend
-cd backend
-.venv/bin/python -m pytest -q -p no:warnings          # 58 passed
-.venv/bin/ruff check app tests                        # clean
-.venv/bin/uvicorn app.main:app --port 8000
+| Feature | Status | Detail |
+| --- | --- | --- |
+| Rotation x = absolute, y = relative | `TESTED-PASS` | Axis contract pinned in tests and on-page |
+| Four quadrants + boundary rule | `TESTED-PASS` | 12 rotation unit tests; ties go to Losing/Lagging |
+| Lookbacks 5/10/20/60/120, default 20 | `TESTED-PASS` | 5/10/20/60/120 controls; 60-session control exercised |
+| Configurable thresholds | `TESTED-PASS` | Panel opens; range inputs present; backend accepts thresholds |
+| Enriched hover | `TESTED-PASS` | Rotation tooltip verified (sector, quadrant, absolute/relative, RS, 20D, volatility, cap, turnover, breadth, HHI, status); other charts not asserted mark-by-mark |
+| Trails | `TESTED-PASS` | 10/25/50 controls; trail query tested for date order |
+| Bubble metric selection | `TESTED-PASS` | Equal, market cap, turnover, volatility, breadth; volatility exercised |
+| Sector visibility filter | `TESTED-PASS` | Hide one sector, counts update, Show all restores |
+| Zoom / reset control | `TESTED-PASS` | Wheel zoom changed the canvas; reset restored the exact pre-zoom hash. Touch pinch `NOT-TESTED` |
+| Synchronized ranking table | `TESTED-PASS` | Sorted table with selected sector; CSV carries the full columns |
+| Transition table/timeline | `TESTED-PASS` | Recent crossings + 120-session rank/excess timeline |
+| Compare presets / range / modes | `TESTED-PASS` | 1Y/3Y/5Y/All, manual dates, rebased/return/absolute |
+| Breadth windows / drill-down | `TESTED-PASS` | 60/120/260; Commercial Banks deep dive |
+| Risk sector selection | `TESTED-PASS` | Commercial Banks drawdown + rolling charts |
+| Fundamentals member selection | `TESTED-PASS` | Table row + Next sector both exercised |
+| Data Quality re-check | `TESTED-PASS` | Action completes; no console errors |
+| Command palette (`⌘K`/`Ctrl-K`) | `TESTED-PASS` | Opens, filters, Enter navigates |
+| Theme toggle | `TESTED-PASS` | Light → dark; dark screenshots captured |
+| Mobile drawer | `TESTED-PASS` | Opens, navigates; no horizontal overflow at 390 px |
+| CSV exports | `TESTED-PASS` | Rotation, Compare, Breadth, Liquidity, Risk, Fundamentals; headers/row counts checked |
+| PNG exports | `TESTED-PASS` | Chart control downloads a real PNG (magic bytes + 2172×1040 verified on compare) |
+| Honest unavailable states | `TESTED-PASS` | Events, Mutual Fund fundamentals, missing data paths render `—`/`UNAVAILABLE` |
 
-# frontend
-cd ../frontend
-npx tsc -b                                            # exit 0
-npm run build                                         # 23 assets, dist ≈ 1.1 MB
+---
 
-# browser
-# open http://127.0.0.1:8000 and follow docs/TESTING_REPORT.md
-```
+## 5. Data status
 
-## 6. Honest next steps, in priority order
+| Dataset | Rows | Status | Disclosure |
+| --- | --- | --- | --- |
+| Sector + NEPSE index observations | 41,509 | `VERIFIED` / `INCOMPLETE` per series | Coverage table in Data Quality |
+| Security reference | 467 | `PROVISIONAL` snapshot | 331 classified; 343 with market cap |
+| Daily summaries | 433,817 | `VERIFIED` mirror | No intraday OHLC; current membership bias |
+| Memberships | 331 | `PROVISIONAL` | Current only; no history |
+| Fundamental reports | 4,840 across 307 symbols | `PROVISIONAL` | Mixed periods; book-value screen |
+| Corporate events | 0 | `UNAVAILABLE` / `BLOCKED` | No verified free feed; page explains |
 
-1. Add a committed Playwright suite so the browser evidence becomes repeatable.
-2. Verify the Docker image build and a real Postgres deployment.
-3. Run a screen-reader pass and tie ECharts animation to `prefers-reduced-motion`.
-4. Add a second source for sector membership (dated snapshots) to remove the survivorship bias.
-5. If a licensed fundamentals feed is obtained, add revenue/assets/leverage — and only then extend the
-   Fundamentals Lab.
+---
+
+## 6. Known gaps that are not bugs
+
+* Historical membership and full financial statements are not available from the verified sources.
+* The official NEPSE API returns HTTP 401 and was not bypassed.
+* Free-host cold starts and ephemeral disks are deployment properties, not app defects.
+* ECharts canvases are not screen-reader accessible; text tables and summaries are the fallback.
+* Safari/WebKit has not been tested because Playwright's WebKit build crashes on this host.
+
+See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) for the full list and
+[FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for the requirement-by-requirement trace.

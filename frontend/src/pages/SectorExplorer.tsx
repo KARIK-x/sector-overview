@@ -20,7 +20,7 @@ import {
 } from '../components/ui'
 import { useTheme } from '../lib/useTheme'
 import { axisStyle, baseOption, palette } from '../lib/chart'
-import { cn, compact, dateLabel, dateShort, npr, num, pct, signedPct, toneClass } from '../lib/format'
+import { cn, compact, dateLabel, dateTick, needsYear, npr, num, pct, signedPct, toneClass } from '../lib/format'
 
 interface BreadthDetail {
   available: boolean
@@ -98,7 +98,11 @@ function IndexChart({ detail, range }: { detail: SectorDetail; range: string }) 
         data: history.map((h) => h.date),
         boundaryGap: false,
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: {
+          ...axis.axisLabel,
+          formatter: (v: string) => dateTick(v, needsYear(history.map((h) => h.date))),
+          hideOverlap: true,
+        },
       },
       yAxis: {
         type: 'value',
@@ -171,7 +175,7 @@ function IndexChart({ detail, range }: { detail: SectorDetail; range: string }) 
     } as unknown as EChartsOption
   }, [history, isDark])
 
-  return <Chart option={option} height={380} />
+  return <Chart option={option} height={380} exportName="sector-price-history" />
 }
 
 function BreadthPanel({ breadth }: { breadth: BreadthDetail }) {
@@ -189,7 +193,11 @@ function BreadthPanel({ breadth }: { breadth: BreadthDetail }) {
         type: 'category',
         data: history.map((h) => h.date),
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: {
+          ...axis.axisLabel,
+          formatter: (v: string) => dateTick(v, needsYear(history.map((h) => h.date))),
+          hideOverlap: true,
+        },
       },
       yAxis: [
         { type: 'value', ...axis, name: 'count', nameTextStyle: { color: p.muted, fontSize: 9 } },
@@ -262,7 +270,7 @@ function BreadthPanel({ breadth }: { breadth: BreadthDetail }) {
           sub="252-session extremes"
         />
       </div>
-      <Chart option={option} height={250} />
+      <Chart option={option} height={250} exportName="sector-breadth" />
       {breadth.notes && (
         <div className="mt-2">
           {breadth.notes.map((n) => (
@@ -292,7 +300,7 @@ function LiquidityPanel({ liquidity }: { liquidity: LiquidityDetail }) {
         type: 'category',
         data: history.map((h) => h.date),
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear(history.map((h) => h.date))), hideOverlap: true },
       },
       yAxis: {
         type: 'value',
@@ -332,7 +340,7 @@ function LiquidityPanel({ liquidity }: { liquidity: LiquidityDetail }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
       <div>
-        <Chart option={option} height={240} />
+        <Chart option={option} height={240} exportName="sector-liquidity" />
         <div className="mt-1 grid grid-cols-3 gap-3">
           <Metric label="Turnover" value={npr(liquidity.turnover)} sub={dateLabel(liquidity.latest_date)} />
           <Metric label="HHI" value={num(liquidity.concentration?.hhi, 3)} sub="turnover concentration" />
@@ -394,13 +402,13 @@ export default function SectorExplorer() {
         }
       />
 
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-4 flex flex-wrap gap-2">
         {list.map((s) => (
           <button
             key={s.code}
             onClick={() => setSector(s.code)}
             className={cn(
-              'shrink-0 rounded-full border px-3 py-1.5 text-[11px] transition-colors',
+              'rounded-full border px-3 py-1.5 text-[11px] transition-colors',
               s.code === code ? 'border-ink bg-ink text-paper' : 'bg-surface text-muted hover:text-ink',
             )}
           >
@@ -599,6 +607,9 @@ export default function SectorExplorer() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-2 text-[10px] text-faint">
+                Scroll for all {(data.fundamentals?.companies ?? []).length} reported members.
               </div>
             </Card>
           </div>

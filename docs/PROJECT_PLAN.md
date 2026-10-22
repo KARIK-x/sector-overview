@@ -27,6 +27,7 @@ This project builds a **sector-only intelligence surface** that is:
 | Risk | Volatility, beta, correlation, drawdown anatomy, historical VaR/CVaR |
 | Fundamentals | Aggregate profit, market cap, P/E (incl. and excl. losses), EPS, ROE, book value |
 | Research | Factor scoring with user weights, quadrant transition matrix, illustrative rotation backtest |
+| Comparison | Date-aligned multi-sector/NEPSE line chart, rebased/return/absolute modes, window statistics |
 | Trust | Data-quality centre, source register, methodology, explicit UNAVAILABLE states |
 
 ### Explicit non-goals
@@ -88,11 +89,11 @@ capitalisation. No open/high/low series is retained.
 | --- | --- | --- |
 | M0 | Environment, repo, data-source verification, official-API audit | Done |
 | M1 | Warehouse schema + idempotent ingestion (13 sectors, 41,509 index rows, 433,817 summaries) | Done |
-| M2 | Calculations package + 58 automated tests | Done |
-| M3 | Read-only API (17 endpoints) + cache + JSON sanitiser | Done |
-| M4 | Eleven pages, design system, charts, command palette, theme | Done |
-| M5 | Independent verification in a real browser (12 routes, interactions, mobile) | Done |
-| M6 | Documentation, screenshots, Dockerfile, deployment guide | This document set |
+| M2 | Calculations package + 64 automated tests | Done |
+| M3 | Read-only API (19 endpoints) + cache + JSON sanitiser | Done |
+| M4 | Twelve content pages, design system, 27 chart surfaces, command palette, theme | Done |
+| M5 | Independent verification in Firefox + Chrome (12 pages + 404, 112 checks, mobile, exports) | Done |
+| M6 | Documentation, 16 screenshots, Dockerfile, deployment guide | Done |
 | M7 | Public deployment on a free tier | **Not deployed** — instructions provided, no account provisioned |
 
 ## 7. Risk register

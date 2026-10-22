@@ -162,3 +162,51 @@ def test_serializer_scrubs_non_finite_values():
         }
     )
     assert cleaned == {"a": None, "b": None, "c": None, "d": [1.0, None], "e": {"f": None}, "g": 2.5}
+
+
+def test_compare_aligns_series(client):
+    r = client.get("/api/compare?codes=BANKING,NEPSE&start=2025-06-01")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert [s["code"] for s in body["series"]] == ["BANKING", "NEPSE"]
+    assert body["common_start"] >= "2025-06-01"
+    for series in body["series"]:
+        dates = [p["date"] for p in series["points"]]
+        assert dates == sorted(dates)
+        assert len(dates) > 100
+        assert dates[0] == body["common_start"]
+        assert dates[-1] == body["end"]
+    # Both series share the same common window, so the endpoints align.
+    assert {s["points"][-1]["date"] for s in body["series"]} == {body["end"]}
+
+
+def test_compare_unknown_series_404(client):
+    assert client.get("/api/compare?codes=NOPE,NEPSE").status_code == 404
+
+
+def test_rotation_history_shape(client):
+    r = client.get("/api/rotation/history?window=20&sessions=60")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["sessions"] == 60
+    assert len(body["dates"]) == 60
+    assert body["dates"] == sorted(body["dates"])
+    assert len(body["series"]) >= 1
+    for series in body["series"]:
+        assert set(series) >= {"code", "name", "rank", "relative", "absolute"}
+        assert len(series["rank"]) == len(body["dates"])
+    assert any(v is not None for v in body["series"][0]["rank"])
+
+
+def test_rotation_trails_are_ordered(client):
+    r = client.get("/api/rotation/trails?window=20&sessions=10")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sessions"] == 10
+    assert "BANKING" in body["trails"]
+    trail = body["trails"]["BANKING"]
+    assert 0 < len(trail) <= 10
+    assert [p["date"] for p in trail] == sorted(p["date"] for p in trail)
+    assert all("absolute_strength" in p and "relative_strength" in p for p in trail)

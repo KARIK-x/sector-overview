@@ -2,14 +2,15 @@ import type { EChartsOption } from 'echarts'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, ShieldCheck } from 'lucide-react'
+import { ArrowUpRight, Download, ShieldCheck } from 'lucide-react'
 import { api } from '../lib/api'
-import type { RiskSummary } from '../lib/api'
+import type { CorrelationMatrix, RiskSummary } from '../lib/api'
 import { Chart } from '../components/Chart'
 import { Card, CardHeader, ErrorState, InfoNote, Loading, Metric, PageHeader, StatusBadge } from '../components/ui'
 import { useTheme } from '../lib/useTheme'
-import { axisStyle, baseOption, palette } from '../lib/chart'
-import { cn, dateLabel, dateShort, num, pct, signedPct, toneClass } from '../lib/format'
+import { axisStyle, baseOption, heatColor, palette } from '../lib/chart'
+import { cn, dateLabel, dateTick, needsYear, num, pct, signedPct, toneClass } from '../lib/format'
+import { downloadCsv } from '../lib/export'
 
 interface SectorRiskDetail {
   available: boolean
@@ -22,6 +23,7 @@ interface SectorRiskDetail {
   var_95?: number | null
   cvar_95?: number | null
   drawdown_series?: Array<{ date: string; drawdown: number }>
+  rolling?: Array<{ date: string; correlation: number | null; volatility: number | null }>
 }
 
 function DrawdownPanel({ code }: { code: string }) {
@@ -46,7 +48,7 @@ function DrawdownPanel({ code }: { code: string }) {
         type: 'category',
         data: series.map((d) => d.date),
         ...axis,
-        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateShort(v), hideOverlap: true },
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear((data?.drawdown_series ?? []).map((d) => d.date))), hideOverlap: true },
       },
       yAxis: {
         type: 'value',
@@ -68,6 +70,94 @@ function DrawdownPanel({ code }: { code: string }) {
     } as unknown as EChartsOption
   }, [data, isDark])
 
+  const rollingOption = useMemo(() => {
+    const p = palette(isDark)
+    const axis = axisStyle(isDark, { split: true, labelSize: 9 })
+    const series = data?.rolling ?? []
+    return {
+      ...baseOption(isDark),
+      grid: { left: 46, right: 50, top: 24, bottom: 32 },
+      legend: { ...baseOption(isDark).legend, top: -2, right: 0, itemWidth: 7, itemHeight: 7 },
+      tooltip: {
+        ...baseOption(isDark).tooltip,
+        trigger: 'axis',
+        formatter: (params: unknown) => {
+          const items = params as Array<{ axisValue: string; seriesName: string; value: number | null; color: string }>
+          if (!items.length) return ''
+          const head = `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:${p.muted};margin-bottom:5px">${dateLabel(items[0].axisValue)}</div>`
+          return (
+            head +
+            items
+              .map(
+                (i) =>
+                  `<div style="display:flex;justify-content:space-between;gap:16px;font-size:11px"><span style="color:${p.muted}">${i.seriesName}</span><b style="font-family:'IBM Plex Mono',monospace">${
+                    i.value == null ? '—' : i.seriesName.includes('Correlation') ? i.value.toFixed(3) : `${(i.value * 100).toFixed(1)}%`
+                  }</b></div>`,
+              )
+              .join('')
+          )
+        },
+      },
+      xAxis: {
+        type: 'category',
+        data: series.map((d) => d.date),
+        boundaryGap: false,
+        ...axis,
+        axisLabel: { ...axis.axisLabel, formatter: (v: string) => dateTick(v, needsYear(series.map((d) => d.date))), hideOverlap: true },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          min: -1,
+          max: 1,
+          ...axis,
+          name: 'ρ',
+          nameGap: 8,
+          nameTextStyle: { color: p.faint, fontSize: 9 },
+          axisLabel: { ...axis.axisLabel, formatter: (v: number) => v.toFixed(1) },
+        },
+        {
+          type: 'value',
+          min: 0,
+          ...axis,
+          splitLine: { show: false },
+          name: 'Vol',
+          nameGap: 8,
+          nameTextStyle: { color: p.faint, fontSize: 9 },
+          axisLabel: { ...axis.axisLabel, formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
+        },
+      ],
+      series: [
+        {
+          name: 'Correlation (60D)',
+          type: 'line',
+          data: series.map((d) => d.correlation),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.4, color: p.accent },
+          itemStyle: { color: p.accent },
+          markLine: {
+            silent: true,
+            symbol: ['none', 'none'],
+            lineStyle: { color: p.faint, type: 'dashed', opacity: 0.5 },
+            label: { show: false },
+            data: [{ yAxis: 0 }],
+          },
+        },
+        {
+          name: 'Volatility (20D)',
+          type: 'line',
+          yAxisIndex: 1,
+          data: series.map((d) => d.volatility),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { width: 1.1, color: isDark ? '#e8b06a' : '#b06a14', opacity: 0.75 },
+          itemStyle: { color: isDark ? '#e8b06a' : '#b06a14' },
+        },
+      ],
+    } as unknown as EChartsOption
+  }, [data, isDark])
+
   if (isLoading) return <Loading label="Loading drawdown" />
   if (!data?.available) return <InfoNote tone="warn">{data?.reason ?? 'Insufficient history for drawdown.'}</InfoNote>
 
@@ -79,7 +169,16 @@ function DrawdownPanel({ code }: { code: string }) {
         <Metric label="Max drawdown" value={signedPct(data.max_drawdown)} tone="neg" sub="full history" />
         <Metric label="Current drawdown" value={signedPct(data.current_drawdown)} tone={(data.current_drawdown ?? 0) < 0 ? 'neg' : 'neutral'} sub="from peak" />
       </div>
-      <Chart option={option} height={240} />
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <span className="eyebrow">Drawdown from running peak</span>
+        <span className="text-[10px] text-muted">full available history</span>
+      </div>
+      <Chart option={option} height={230} exportName={`risk-drawdown-${code}`} />
+      <div className="mb-2 mt-4 flex items-baseline justify-between gap-2">
+        <span className="eyebrow">Rolling market sensitivity</span>
+        <span className="text-[10px] text-muted">60-session ρ · 20-session realised vol</span>
+      </div>
+      <Chart option={rollingOption} height={210} exportName={`risk-rolling-${code}`} />
     </div>
   )
 }
@@ -224,6 +323,83 @@ export default function RiskLab() {
     } as unknown as EChartsOption
   }, [rows, isDark])
 
+  const matrixOption = useMemo(() => {
+    const matrix: CorrelationMatrix | null | undefined = data?.correlation_matrix
+    const p = palette(isDark)
+    const axis = axisStyle(isDark, { split: false, labelSize: 9 })
+    const labels = matrix?.labels ?? []
+    const values = matrix?.values ?? []
+    const short = (name: string) =>
+      name
+        .replace('Commercial Banks', 'Banks')
+        .replace('Development Banks', 'Dev Banks')
+        .replace('Hotels And Tourism', 'Hotels')
+        .replace('Life Insurance', 'Life Ins.')
+        .replace('Manufacturing And Processing', 'Manufacturing')
+        .replace('Non Life Insurance', 'Non-Life')
+        .replace('Microfinance', 'Microfinance')
+        .replace('Mutual Fund', 'Mutual')
+        .replace('Investment', 'Investment')
+        .replace('Hydro Power', 'Hydro')
+        .replace('Finance', 'Finance')
+        .replace('Trading', 'Trading')
+        .replace('Others', 'Others')
+        .replace('NEPSE', 'NEPSE')
+    const points = values.flatMap((row, y) =>
+      row.map((v, x) => ({
+        value: [x, y, v],
+        itemStyle: { color: heatColor(v, 1, isDark, 0.55) },
+      })),
+    )
+    return {
+      ...baseOption(isDark),
+      animation: false,
+      grid: { left: 92, right: 16, top: 10, bottom: 78 },
+      tooltip: {
+        ...baseOption(isDark).tooltip,
+        formatter: (params: unknown) => {
+          const d = (params as { value?: [number, number, number | null] }).value
+          if (!d) return ''
+          const [x, y, v] = d
+          return `<div style="font-size:11px"><b>${labels[y] ?? ''}</b> × <b>${labels[x] ?? ''}</b><div style="font-family:'IBM Plex Mono',monospace;margin-top:3px">ρ = ${v == null ? '—' : v.toFixed(3)}</div></div>`
+        },
+      },
+      xAxis: {
+        type: 'category',
+        data: labels.map(short),
+        ...axis,
+        axisLabel: { ...axis.axisLabel, rotate: 38, fontSize: 8, margin: 10 },
+        splitArea: { show: false },
+      },
+      yAxis: {
+        type: 'category',
+        data: labels.map(short),
+        inverse: true,
+        ...axis,
+        axisLabel: { ...axis.axisLabel, fontSize: 8 },
+        splitArea: { show: false },
+      },
+      series: [
+        {
+          type: 'heatmap',
+          data: points,
+          label: {
+            show: true,
+            fontSize: 8.5,
+            fontFamily: "'IBM Plex Mono', monospace",
+            formatter: (params: unknown) => {
+              const v = (params as { value: [number, number, number | null] }).value[2]
+              return v == null ? '' : v.toFixed(2)
+            },
+            color: p.ink,
+          },
+          itemStyle: { borderColor: p.surface, borderWidth: 1 },
+          emphasis: { itemStyle: { borderColor: p.ink, borderWidth: 1.5 } },
+        },
+      ],
+    } as unknown as EChartsOption
+  }, [data, isDark])
+
   const highestVol = [...rows].sort((a, b) => (b.volatility ?? 0) - (a.volatility ?? 0))[0]
   const deepest = [...rows].sort((a, b) => (a.max_drawdown ?? 0) - (b.max_drawdown ?? 0))[0]
   const lowestVol = [...rows].sort((a, b) => (a.volatility ?? 9) - (b.volatility ?? 9))[0]
@@ -256,19 +432,71 @@ export default function RiskLab() {
                 title="120-session return against volatility"
                 subtitle="Bubble size reflects the maximum historical drawdown. Labels mark the highest volatility and the best/worst 120-session returns; hover any bubble for its name."
               />
-              <Chart option={scatterOption} height={380} />
+              <Chart option={scatterOption} height={380} exportName="risk-return-scatter" />
             </Card>
             <Card>
               <CardHeader eyebrow="Volatility ranking" title="Annualised dispersion" subtitle="Daily return standard deviation × √252" />
-              <Chart option={volOption} height={380} />
+              <Chart option={volOption} height={380} exportName="risk-volatility-ranking" />
             </Card>
           </div>
+
+          <Card className="mt-4">
+            <CardHeader
+              eyebrow="Correlation matrix · 252 sessions"
+              title="Which sectors move together"
+              subtitle="Pairwise-complete daily return correlation. Sectors with fewer shared observations are computed on their overlap, so each cell states its own sample rather than an imputed one."
+              actions={
+                <span className="hidden text-[10px] text-muted sm:inline">
+                  {data.correlation_matrix?.labels.length ?? 0} series
+                </span>
+              }
+            />
+            {data.correlation_matrix ? (
+              <>
+                <Chart option={matrixOption} height={560} exportName="risk-correlation-matrix" />
+                <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-muted">
+                  <span className="num">−1</span>
+                  <span
+                    className="h-2 w-40 rounded-full"
+                    style={{
+                      background: isDark
+                        ? 'linear-gradient(90deg,#8e3a3a,#3a2a28,#111917,#173b33,#2f9c82)'
+                        : 'linear-gradient(90deg,#b23b3b,#e8c4bd,#fffdf8,#b7ddd3,#0e7c66)',
+                    }}
+                  />
+                  <span className="num">+1</span>
+                  <span className="ml-2 text-faint">red = moves against · teal = moves with</span>
+                </div>
+              </>
+            ) : (
+              <InfoNote>At least two sector series with 30 shared sessions are required for a correlation matrix.</InfoNote>
+            )}
+          </Card>
 
           <Card className="mt-4">
             <CardHeader
               eyebrow="Risk table"
               title="Cross-sectional risk metrics"
               subtitle="VaR and CVaR are historical daily estimates at 95% confidence using a 252-session window."
+              actions={
+                <button
+                  className="btn"
+                  onClick={() =>
+                    downloadCsv(
+                      'nepse-risk-metrics',
+                      ['Sector', 'Volatility', 'Beta', 'Correlation', 'Max drawdown', 'Current drawdown', 'VaR 95', 'CVaR 95', 'Observations'],
+                      [...rows]
+                        .sort((a, b) => (a.volatility ?? 0) - (b.volatility ?? 0))
+                        .map((r) => [
+                          r.name, r.volatility, r.beta, r.correlation, r.max_drawdown,
+                          r.current_drawdown, r.var_95, r.cvar_95, r.observations,
+                        ]),
+                    )
+                  }
+                >
+                  <Download size={12} /> CSV
+                </button>
+              }
             />
             <div className="table-wrap">
               <table className="data-table">

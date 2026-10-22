@@ -96,7 +96,7 @@ export default function DataQuality() {
             </Card>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+          <div className="mt-4 grid gap-4">
             <Card>
               <CardHeader
                 eyebrow="Index coverage"
@@ -153,7 +153,7 @@ export default function DataQuality() {
               </InfoNote>
             </Card>
 
-            <div className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader eyebrow="Dataset inventory" title="What is stored" />
                 <div className="space-y-2 text-[11px]">

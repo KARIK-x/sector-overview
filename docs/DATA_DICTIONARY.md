@@ -157,6 +157,11 @@ structured issue tracking; the current build records issues in payload notes and
 | `aggregate_roe` | Σ profit ÷ Σ validated equity | fraction |
 | `aggregate_eps` | Σ profit ÷ Σ shares (`paid_up_capital / 100`) | NPR/share |
 | `coverage` | Available factor values ÷ total factors | fraction |
+| `common_start` | Latest first observation across the requested comparison series | ISO date |
+| `rolling_correlation` | 60-session rolling Pearson correlation, min 40 paired returns | −1 … 1 |
+| `rolling_volatility` | 20-session rolling standard deviation × √252 | annualised fraction |
+| `correlation_matrix` | Pairwise-complete daily-return correlation over 252 sessions, min 30 pairs | −1 … 1, 14×14 |
+| `rank` (rotation history) | Per-session cross-sector rank of relative strength, `method="min"`; missing = not ranked | 1 … 13 or `null` |
 
 ---
 
@@ -174,11 +179,13 @@ Non-finite numbers are serialised as `null`.
 | `/api/dashboard` | — | Market overview, 20-session rotation, transitions, heatmap, liquidity cross-section, breadth, risk, leaders/laggards, freshness |
 | `/api/heatmap` | — | 7 horizons × 13 sectors return matrix |
 | `/api/rotation` | `window` (5/10/20/60/120, default 20), `abs_threshold`, `rel_threshold` | Axis metadata, rows, quadrant census, crossings |
-| `/api/rotation/trails` | `window`, `sessions` (0–120), thresholds | Per-sector trail coordinates |
-| `/api/breadth` | `sector` (optional) | Market breadth summary or sector breadth detail |
-| `/api/liquidity` | `sector` (optional) | Market liquidity summary or sector liquidity detail |
-| `/api/risk` | `sector` (optional) | Cross-sectional risk table or sector drawdown detail |
-| `/api/fundamentals` | — | Per-sector aggregates, member reports, notes |
+| `/api/rotation/trails` | `window`, `sessions` (2–250; UI Off/10/25/50), thresholds | Per-sector trail coordinates, ordered by date |
+| `/api/rotation/history` | `window` (default 20), `sessions` (10–250, default 120) | Per-session absolute/relative values and cross-sector rank; rank 1 = strongest excess return |
+| `/api/compare` | `codes` (comma-separated), `start`, `end` | Date-aligned levels for sectors/NEPSE; reports `common_start`; 404 for unknown code |
+| `/api/breadth` | `sector` (optional) | Market breadth summary (260-session history + NEPSE index history) or sector breadth detail |
+| `/api/liquidity` | `sector` (optional) | Market liquidity summary (turnover, share, HHI, 5/20/60 returns, cap) or sector liquidity detail |
+| `/api/risk` | `sector` (optional) | 14×14 pairwise-complete correlation matrix + risk rows, or sector drawdown/rolling detail |
+| `/api/fundamentals` | — | Per-sector aggregates, member reports, coverage and validation notes |
 | `/api/factors` | `weight_*` for six factors | Scores, contributions, coverage, missing factors |
 | `/api/research` | — | Transition matrix, backtest curves, notes |
 | `/api/events` | — | `UNAVAILABLE` with reasons |

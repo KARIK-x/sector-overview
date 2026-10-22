@@ -164,8 +164,9 @@ Four sub-indices cover materially less than the NEPSE calendar:
 
 ### 4.1 No authentication or multi-user features
 
-* Read-only public API; no accounts, watchlists, saved views, alerts or exports.
+* Read-only public API; no accounts, watchlists, saved views or alerts.
 * **Reason:** scope and free hosting. Adding auth would add a database writer and a session store.
+* CSV and PNG exports are client-side only and require no account.
 
 ### 4.2 No corporate events feed
 
@@ -175,7 +176,9 @@ Four sub-indices cover materially less than the NEPSE calendar:
 
 ### 4.3 Browser coverage
 
-* Tested only in Chromium. Firefox and Safari were not exercised.
+* Tested in **Firefox** (76 interaction checks) and **Google Chrome** (36 checks), both against the
+  production build. Safari/WebKit is **not tested**: Playwright's WebKit build crashes with a host
+  `Bus error: 10` before the first page. No Safari claim is made.
 * CSS uses standard grid/flex and CSS variables; `color-mix()` is used in decorative gradients and
   scrollbars, with graceful degradation, but this was not verified in older browsers.
 
@@ -213,12 +216,15 @@ Four sub-indices cover materially less than the NEPSE calendar:
 * **Impact:** a determined client can generate database load. Free tiers include some protection at
   the edge, but the app does not implement its own limiter.
 
-### 4.9 Tests are not a committed browser suite
+### 4.9 Browser checks are not wired into CI
 
-* The backend has 58 automated tests; the browser pass was exploratory, with screenshots and console
-  assertions recorded in the testing report.
-* **Impact:** UI regressions are not caught automatically. Adding a Playwright suite is the obvious
-  next step.
+* The backend has **64 automated tests**. Playwright harnesses for the 76 Firefox and 36 Chrome checks
+  are committed under `scripts/verification/`, but Playwright is not a dependency and no CI runner
+  executes them.
+* Hover content on every mark and the wheel/pinch zoom gesture are implemented but not asserted
+  automatically.
+* **Impact:** UI regressions are not caught on push. Wiring the harnesses into CI is the obvious next
+  step; running them is documented in the testing report.
 
 ### 4.10 Documentation is intentionally explicit
 

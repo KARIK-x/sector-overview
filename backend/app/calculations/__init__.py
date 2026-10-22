@@ -162,6 +162,8 @@ def beta(asset_returns: Sequence[float | None], market_returns: Sequence[float |
 
 
 def correlation(x: Sequence[float | None], y: Sequence[float | None]) -> float | None:
+    if len(x) != len(y):
+        return None
     pairs = [
         (a, b)
         for a, b in zip(x, y, strict=False)
@@ -230,11 +232,18 @@ def macd(
 ) -> tuple[list[float | None], list[float | None], list[float | None]]:
     fast_ema = ema(values, fast)
     slow_ema = ema(values, slow)
+    # EMA is seeded on the first observation, so mask the warm-up span where the
+    # slow average is still dominated by its seed. This keeps a short series from
+    # reporting a MACD that has not actually stabilised.
+    warmup = slow - 1
     line = [
-        (f - s) if f is not None and s is not None else None
-        for f, s in zip(fast_ema, slow_ema, strict=True)
+        (f - s) if f is not None and s is not None and i >= warmup else None
+        for i, (f, s) in enumerate(zip(fast_ema, slow_ema, strict=True))
     ]
-    signal_line = ema(line, signal)
+    signal_line = [
+        None if i < warmup + signal - 1 else v
+        for i, v in enumerate(ema(line, signal))
+    ]
     hist = [
         (lead - sig) if lead is not None and sig is not None else None
         for lead, sig in zip(line, signal_line, strict=True)

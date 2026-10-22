@@ -72,7 +72,7 @@ function SessionBrief({ data }: { data: DashboardPayload }) {
           />
           <Metric
             label="Turnover"
-            value={npr(data.liquidity.total_turnover)}
+            value={<span className="whitespace-nowrap text-[18px]">{npr(data.liquidity.total_turnover)}</span>}
             sub={`${data.liquidity.rows?.length ?? 0} sectors observed`}
           />
           <Metric
@@ -237,51 +237,8 @@ function BreadthCard({ data }: { data: DashboardPayload }) {
 }
 
 function LiquidityCard({ data }: { data: DashboardPayload }) {
-  const { isDark } = useTheme()
-  const rows = data.liquidity.rows ?? []
-  const option = useMemo(() => {
-    const p = palette(isDark)
-    return {
-      ...baseOption(isDark),
-      tooltip: {
-        ...baseOption(isDark).tooltip,
-        trigger: 'item',
-        formatter: (params: unknown) => {
-          const d = params as { name: string; value: number; data?: { share?: number } }
-          return `<div><b>${d.name}</b><br/><span style="font-family:'IBM Plex Mono',monospace">${npr(d.value)}</span><br/><span style="font-size:10px;color:${p.muted}">${pct(d.data?.share ?? null)} of observed turnover</span></div>`
-        },
-      },
-      series: [
-        {
-          type: 'treemap',
-          data: rows.map((r) => ({
-            name: r.sector_name,
-            value: r.turnover ?? 0,
-            share: r.share,
-            itemStyle: { color: isDark ? 'rgba(79,209,176,0.22)' : 'rgba(14,124,102,0.16)', borderColor: p.surface, borderWidth: 2 },
-          })),
-          roam: false,
-          nodeClick: false,
-          breadcrumb: { show: false },
-          label: {
-            show: true,
-            formatter: (params: unknown) => {
-              const d = params as { name: string; data?: { share?: number } }
-              return `${d.name}\n${pct(d.data?.share ?? null, 1)}`
-            },
-            color: p.ink,
-            fontSize: 10,
-            lineHeight: 15,
-            fontFamily: "'IBM Plex Sans', sans-serif",
-          },
-          upperLabel: { show: false },
-          itemStyle: { borderRadius: 4, gapWidth: 2 },
-          levels: [{ itemStyle: { borderWidth: 0 } }],
-        },
-      ],
-    } as unknown as EChartsOption
-  }, [rows, isDark])
-
+  const rows = [...(data.liquidity.rows ?? [])].sort((a, b) => (b.share ?? 0) - (a.share ?? 0)).slice(0, 6)
+  const max = Math.max(...rows.map((r) => r.share ?? 0), 0.0001)
   return (
     <Card>
       <CardHeader
@@ -290,8 +247,25 @@ function LiquidityCard({ data }: { data: DashboardPayload }) {
         subtitle={`${npr(data.liquidity.total_turnover)} observed on ${dateLabel(data.liquidity.latest_date)}`}
         actions={<Link to="/liquidity" className="text-[11px] text-accent hover:underline">Detail</Link>}
       />
-      <Chart option={option} height={278} />
-      <InfoNote>Turnover is traded value, not net investor inflow.</InfoNote>
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.sector_name}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-[11px]">{r.sector_name}</span>
+              <span className="num text-[10px] text-muted">{pct(r.share, 1)}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-sm" style={{ background: 'color-mix(in srgb, var(--line) 55%, transparent)' }}>
+              <div
+                className="h-full rounded-sm bg-[#0e7c66] dark:bg-[#4fd1b0]"
+                style={{ width: `${Math.max(2, ((r.share ?? 0) / max) * 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 border-t pt-2 text-[10px] text-muted">
+        Top {rows.length} of {data.liquidity.rows?.length ?? 0} sectors · traded value, not net investor inflow.
+      </div>
     </Card>
   )
 }
@@ -360,6 +334,7 @@ function RiskCard({ data }: { data: DashboardPayload }) {
             fontSize: 8,
             formatter: (params: unknown) => (params as { name: string }).name.split(' ')[0],
           },
+          labelLayout: { hideOverlap: true },
         },
       ],
     } as unknown as EChartsOption
@@ -373,7 +348,7 @@ function RiskCard({ data }: { data: DashboardPayload }) {
         subtitle="252-session window · beta measured against NEPSE"
         actions={<Link to="/risk" className="text-[11px] text-accent hover:underline">Detail</Link>}
       />
-      <Chart option={option} height={278} />
+      <Chart option={option} height={278} exportName="dashboard-risk-scatter" />
       <InfoNote>Beta above 1 implies amplified sensitivity to NEPSE moves. Past volatility is not a forecast.</InfoNote>
     </Card>
   )
@@ -438,6 +413,7 @@ export default function Dashboard() {
             rows={data.rotation.rows}
             trails={trails?.trails}
             height={430}
+            exportName="dashboard-rotation-map"
             onSelect={(code) => navigate(`/sectors?code=${code}`)}
           />
         </Card>
@@ -446,7 +422,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <div className="mt-4">
         <Card>
           <CardHeader
             eyebrow="Return surface"
@@ -454,12 +430,13 @@ export default function Dashboard() {
             subtitle="Cumulative index return by trading-session lookback. Click a cell to open the sector."
             actions={<Link to="/sectors" className="text-[11px] text-accent hover:underline">Explore</Link>}
           />
-          <SectorHeatmap data={data.heatmap} height={470} onSelect={(code) => navigate(`/sectors?code=${code}`)} />
+          <SectorHeatmap data={data.heatmap} height={440} onSelect={(code) => navigate(`/sectors?code=${code}`)} />
         </Card>
-        <div className="grid gap-4">
-          <BreadthCard data={data} />
-          <LiquidityCard data={data} />
-        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <BreadthCard data={data} />
+        <LiquidityCard data={data} />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">

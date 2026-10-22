@@ -153,7 +153,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/35 px-4 pt-[12vh] backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/35 px-4 pt-[12vh]" onClick={onClose}>
       <div
         className="w-full max-w-xl overflow-hidden rounded-2xl border bg-surface shadow-lift"
         onClick={(e) => e.stopPropagation()}
@@ -243,7 +243,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r bg-surface/70 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r bg-surface/95 lg:flex">
         <div className="px-5 py-5">
           <Logo />
         </div>
@@ -267,7 +267,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile drawer */}
       {mobile && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobile(false)} />
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobile(false)} />
           <aside className="absolute inset-y-0 left-0 w-[86%] max-w-[320px] overflow-y-auto border-r bg-surface p-4 shadow-lift">
             <div className="mb-5 flex items-center justify-between">
               <Logo />
@@ -284,7 +284,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="lg:pl-[248px]">
-        <header className="sticky top-0 z-30 border-b bg-paper/85 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b bg-paper/95">
           <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button className="btn h-8 w-8 p-0 lg:hidden" onClick={() => setMobile(true)} aria-label="Open menu">
               <Menu size={16} />

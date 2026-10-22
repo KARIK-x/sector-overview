@@ -33,6 +33,8 @@ export function compact(value: number | null | undefined): string {
 export function npr(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
   const abs = Math.abs(value)
+  if (abs >= 1e12) return `NPR ${(value / 1e12).toFixed(2)} tn`
+  if (abs >= 1e9) return `NPR ${(value / 1e9).toFixed(2)} bn`
   if (abs >= 1e7) return `NPR ${(value / 1e7).toFixed(2)} cr`
   if (abs >= 1e5) return `NPR ${(value / 1e5).toFixed(2)} lakh`
   return `NPR ${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -108,4 +110,22 @@ export const QUADRANT_META: Record<
 
 export function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
+}
+
+/** Axis tick: day+month for short spans, month+year when the window crosses years. */
+export function dateTick(value: string, withYear: boolean): string {
+  if (!value) return ''
+  const d = new Date(`${value.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return value
+  const month = d.toLocaleString('en-US', { month: 'short' })
+  if (withYear) return `${month} '${String(d.getFullYear()).slice(-2)}`
+  return `${String(d.getDate()).padStart(2, '0')} ${month}`
+}
+
+/** True when the first and last ISO dates are more than ~10 months apart. */
+export function needsYear(dates: string[]): boolean {
+  if (dates.length < 2) return false
+  const a = new Date(`${dates[0].slice(0, 10)}T00:00:00`).getTime()
+  const b = new Date(`${dates[dates.length - 1].slice(0, 10)}T00:00:00`).getTime()
+  return Number.isFinite(a) && Number.isFinite(b) && b - a > 300 * 86400000
 }
