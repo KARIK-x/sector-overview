@@ -126,6 +126,7 @@ export function SectorHeatmap({
           option={option}
           height={height}
           exportName="sector-performance-heatmap"
+          reserveTools
           onEvents={{
             click: (params: unknown) => {
               const d = (params as { data?: { value?: [number, number, number] } }).data

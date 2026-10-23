@@ -359,6 +359,17 @@ export default function RiskLab() {
       ...baseOption(isDark),
       animation: false,
       grid: { left: 92, right: 16, top: 10, bottom: 78 },
+      // ECharts refuses to paint a heatmap without a visualMap even when every
+      // cell carries its own itemStyle colour. Keep it hidden; the visible
+      // colour key sits below the chart.
+      visualMap: {
+        show: false,
+        min: -1,
+        max: 1,
+        inRange: {
+          color: [heatColor(-1, 1, isDark, 0.55), heatColor(0, 1, isDark, 0.55), heatColor(1, 1, isDark, 0.55)],
+        },
+      },
       tooltip: {
         ...baseOption(isDark).tooltip,
         formatter: (params: unknown) => {
@@ -457,7 +468,7 @@ export default function RiskLab() {
             />
             {data.correlation_matrix ? (
               <>
-                <Chart option={matrixOption} height={560} exportName="risk-correlation-matrix" />
+                <Chart option={matrixOption} height={560} exportName="risk-correlation-matrix" reserveTools />
                 <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-muted">
                   <span className="num">−1</span>
                   <span

@@ -11,6 +11,7 @@ import {
   LineChart,
   Newspaper,
   ShieldCheck,
+  Sparkles,
   Waves,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -31,6 +32,14 @@ export const NAV: NavItem[] = [
     short: 'Pulse',
     icon: LayoutDashboard,
     description: 'Market pulse, rotation map, breadth, liquidity and risk at a glance.',
+    group: 'Overview',
+  },
+  {
+    to: '/new',
+    label: 'New',
+    short: 'New',
+    icon: Sparkles,
+    description: 'Every sector and NEPSE on one percentage-change scale, rebased to each series’ own start.',
     group: 'Overview',
   },
   {

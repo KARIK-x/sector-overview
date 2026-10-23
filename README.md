@@ -34,6 +34,7 @@ for a data refresh.
 | Page | Question it answers |
 | --- | --- |
 | **Dashboard** | What is the market doing by sector, right now? |
+| **New** | Every sector and NEPSE on one own-start percentage-change scale. |
 | **Sector Explorer** | Everything the app knows about one sector, with the gaps labelled. |
 | **Rotation Lab** | Which sectors are winning, advancing, losing or lagging on two axes? |
 | **Sector Comparison** | How have selected sectors and NEPSE travelled over the same window? |
@@ -46,8 +47,9 @@ for a data refresh.
 | **Events & Research** | What would a corporate-events feed require, and why is it unavailable? |
 | **Methodology** | What is every formula, window and status label? |
 
-Twelve content pages plus a 404 route. All charts are Apache ECharts; all numbers come from the
-FastAPI backend, never from hard-coded UI values. CSV and PNG exports are client-side.
+Thirteen content pages plus a 404 route. All charts are Apache ECharts; all numbers come from the
+FastAPI backend, never from hard-coded UI values. Charts share pan, zoom, period, reset, full-screen
+and PNG controls; CSV and PNG exports are client-side.
 
 ---
 

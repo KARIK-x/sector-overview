@@ -2,7 +2,7 @@ import type { EChartsOption } from 'echarts'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Download, Eye, RotateCcw, SlidersHorizontal, Star } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Download, Eye, Play, RotateCcw, SlidersHorizontal, Star } from 'lucide-react'
 import { api } from '../lib/api'
 import type { RotationRow, TrailPoint } from '../lib/api'
 import { BUBBLE_METRICS, RotationQuadrant } from '../components/RotationQuadrant'
@@ -114,7 +114,7 @@ function SelectedSector({ row, trail }: { row: RotationRow; trail?: TrailPoint[]
         <Metric label="Relative" value={signedPct(row.relative_strength)} tone={row.relative_strength && row.relative_strength > 0 ? 'pos' : 'neg'} />
       </div>
       <div className="mt-3">
-        <Chart option={option} height={150} exportName="rotation-selected-trail" />
+        <Chart option={option} height={150} exportName="rotation-selected-trail" reserveTools />
       </div>
       <div className="mt-2 grid grid-cols-3 gap-2 border-t pt-3 text-[10px]">
         <div>
@@ -277,6 +277,7 @@ export default function RotationLab() {
     }
   })
   const [zoomKey, setZoomKey] = useState(0)
+  const [trailReplay, setTrailReplay] = useState(0)
 
   useEffect(() => localStorage.setItem('nsi-pref-lookback', String(window)), [window])
   useEffect(() => localStorage.setItem('nsi-pref-trail', String(trailSessions)), [trailSessions])
@@ -510,18 +511,27 @@ export default function RotationLab() {
                 onSelect={setSelected}
                 bubbleMetric={bubbleMetric}
                 exportName={`nepse-rotation-${window}s`}
+                replayToken={trailReplay}
               />
               <p className="mt-2 text-center text-[10px] text-muted">
                 Bubble size: {BUBBLE_METRICS.find((b) => b.value === bubbleMetric)?.label.toLowerCase()}.
                 Scroll or pinch over the map to zoom, drag to pan, then reset with “Reset zoom”. Tick marks remain
-                fixed to the axes.
+                fixed to the axes. Click a sector to replay its trail; the arrow shows the last sessions’
+                direction, and the dashed extension is a mechanical extrapolation — not a forecast.
               </p>
             </Card>
             <div className="grid gap-4">
               <Card className="min-h-[260px]">
                 {selectedRow ? (
                   <>
-                    <div className="mb-3 flex justify-end">
+                    <div className="mb-3 flex justify-end gap-2">
+                      <button
+                        className="btn text-[10px]"
+                        onClick={() => setTrailReplay((v) => v + 1)}
+                        title="Replay this sector’s trail on the map"
+                      >
+                        <Play size={12} /> Replay trail
+                      </button>
                       <button
                         className="btn text-[10px]"
                         onClick={() =>

@@ -301,7 +301,7 @@ export default function ResearchLab() {
             title="Quadrant persistence"
             subtitle="Historical quadrant transitions across all sectors and sessions. Rows are origin, columns are destination."
           />
-          {loadingResearch ? <Loading label="Loading transitions" /> : <Chart option={matrixOption} height={280} exportName="research-transition-matrix" />}
+          {loadingResearch ? <Loading label="Loading transitions" /> : <Chart option={matrixOption} height={280} exportName="research-transition-matrix" reserveTools />}
           <InfoNote>Diagonal cells indicate persistence. Off-diagonal mass shows where leadership tends to migrate.</InfoNote>
         </Card>
         <Card>

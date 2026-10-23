@@ -104,24 +104,77 @@ body::before {
     @apply p-4 sm:p-5;
   }
 
-  /* Chart export control: quiet until the chart is hovered or focused, so it
-     never competes with the data, but always reachable by keyboard. */
-  .chart-export {
-    @apply absolute right-1 top-1 z-10 inline-flex items-center gap-1 rounded-md border px-1.5 py-1 font-mono text-[9px] uppercase tracking-wider text-muted transition-opacity;
+  /* Chart interaction toolbar: quiet until the chart is hovered or focused,
+     so it never competes with the data, but always reachable by keyboard. */
+  .chart-tools {
+    @apply absolute right-1.5 top-7 z-10 flex items-center gap-1 rounded-lg border p-0.5 transition-opacity;
     border-color: var(--line);
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
     opacity: 0;
+    pointer-events: none;
   }
-  .chart-frame:hover .chart-export,
-  .chart-export:focus-visible {
+  .chart-frame:hover .chart-tools,
+  .chart-tools:focus-within {
     opacity: 1;
+    pointer-events: auto;
   }
-  .chart-export:hover {
+  .chart-tool {
+    @apply inline-flex items-center gap-1 rounded-md border px-1.5 py-1 font-mono text-[9px] uppercase tracking-wider text-muted transition-colors;
+    border-color: transparent;
+    background: transparent;
+  }
+  .chart-tool:hover {
     color: var(--ink);
-    border-color: var(--faint);
+    border-color: var(--line);
+    background: var(--raised);
+  }
+  .chart-range {
+    padding: 0;
+    border-color: var(--line);
+  }
+  .chart-range select {
+    @apply cursor-pointer rounded-md bg-transparent px-1.5 py-1 font-mono text-[9px] uppercase tracking-wider text-muted outline-none;
+  }
+  .chart-range select:hover {
+    color: var(--ink);
+  }
+  /* Heatmaps and other axis-at-the-top charts reserve their own control strip. */
+  .chart-frame-reserve-tools {
+    padding-top: 30px;
+  }
+  .chart-frame-reserve-tools .chart-tools {
+    top: 3px;
   }
   @media (hover: none) {
-    .chart-export { opacity: 0.7; }
+    .chart-tools {
+      opacity: 0.75;
+      pointer-events: auto;
+    }
+  }
+
+  /* Full-screen mode gives the canvas the whole viewport. The fallback class
+     covers browsers (notably iPhone Safari) without Element.requestFullscreen. */
+  .chart-frame:fullscreen,
+  .chart-frame-faux-fullscreen {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    background: var(--surface);
+  }
+  .chart-frame-faux-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+  }
+  .chart-frame:fullscreen .chart-tools,
+  .chart-frame-faux-fullscreen .chart-tools {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .chart-frame:fullscreen > div:not(.chart-tools),
+  .chart-frame-faux-fullscreen > div:not(.chart-tools) {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .eyebrow {

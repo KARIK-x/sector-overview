@@ -5,6 +5,7 @@ import { Layout } from './components/Layout'
 import { Card, Loading } from './components/ui'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
+const NewPulse = lazy(() => import('./pages/NewPulse'))
 const SectorExplorer = lazy(() => import('./pages/SectorExplorer'))
 const RotationLab = lazy(() => import('./pages/RotationLab'))
 const Compare = lazy(() => import('./pages/Compare'))
@@ -53,6 +54,7 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/new" element={<NewPulse />} />
           <Route path="/sectors" element={<SectorExplorer />} />
           <Route path="/rotation" element={<RotationLab />} />
           <Route path="/compare" element={<Compare />} />

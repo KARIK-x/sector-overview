@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { EChartsOption } from 'echarts'
 import { Chart } from './Chart'
 import type { RotationRow, TrailPoint } from '../lib/api'
@@ -34,6 +34,8 @@ export function RotationQuadrant({
   compact = false,
   bubbleMetric = 'none',
   exportName,
+  animateSelected = true,
+  replayToken = 0,
 }: {
   rows: RotationRow[]
   trails?: Record<string, TrailPoint[]>
@@ -45,8 +47,38 @@ export function RotationQuadrant({
   compact?: boolean
   bubbleMetric?: BubbleMetric
   exportName?: string
+  /** Replay the selected sector's trail when the selection changes. */
+  animateSelected?: boolean
+  /** Increment to replay the selected trail without changing the selection. */
+  replayToken?: number
 }) {
   const { isDark } = useTheme()
+  const reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const [reveal, setReveal] = useState(0)
+  const selectedTrail = selected && trails ? trails[selected] : undefined
+
+  useEffect(() => {
+    if (!animateSelected || !selected || !selectedTrail || selectedTrail.length < 2) {
+      setReveal(selectedTrail?.length ?? 0)
+      return
+    }
+    if (reducedMotion) {
+      setReveal(selectedTrail.length)
+      return
+    }
+    setReveal(1)
+    const timer = window.setInterval(() => {
+      setReveal((value) => {
+        if (value >= selectedTrail.length) {
+          window.clearInterval(timer)
+          return value
+        }
+        return value + 1
+      })
+    }, 85)
+    return () => window.clearInterval(timer)
+  }, [animateSelected, reducedMotion, replayToken, selected, selectedTrail])
 
   const option = useMemo<EChartsOption>(() => {
     const p = palette(isDark)
@@ -75,15 +107,22 @@ export function RotationQuadrant({
           const color = quadrantColor(row?.quadrant, isDark)
           const last = points[points.length - 1]
           const isSelected = selected === code
+          const trailData = points.map((t) => ({
+            value: [t.absolute_strength, t.relative_strength] as [number, number],
+            code,
+            date: t.date,
+            quadrant: t.quadrant,
+          }))
+          const revealCount = isSelected
+            ? Math.max(1, Math.min(reveal, trailData.length))
+            : trailData.length
+          const marker = isSelected
+            ? points[Math.max(0, Math.min(revealCount - 1, points.length - 1))]
+            : last
           return {
             type: 'line' as const,
             name: `${row?.name ?? code} trail`,
-            data: points.map((t) => ({
-              value: [t.absolute_strength, t.relative_strength],
-              code,
-              date: t.date,
-              quadrant: t.quadrant,
-            })),
+            data: isSelected ? trailData.slice(0, revealCount) : trailData,
             symbol: 'none',
             silent: false,
             animation: false,
@@ -106,19 +145,115 @@ export function RotationQuadrant({
               : { show: false },
             z: isSelected ? 4 : 1,
             markPoint:
-              last && row
+              marker && row
                 ? {
                     symbol: 'circle',
                     symbolSize: isSelected ? 7 : 4,
                     silent: true,
                     label: { show: false },
                     itemStyle: { color, opacity: isSelected ? 0.95 : 0.5 },
-                    data: [{ coord: [last.absolute_strength, last.relative_strength] }],
+                    data: [{ coord: [marker.absolute_strength, marker.relative_strength] }],
                   }
                 : undefined,
           }
         })
       : []
+
+    // A short, mechanical reading of the last few sessions. The arrow shows
+    // where the sector has been heading; the dashed extension is an
+    // extrapolation of that direction, not a forecast.
+    const direction = (trail: TrailPoint[] | undefined) => {
+      if (!trail || trail.length < 2) return null
+      const tail = trail.slice(-6)
+      const first = tail[0]
+      const last = tail[tail.length - 1]
+      const steps = tail.length - 1
+      const dx = (last.absolute_strength - first.absolute_strength) / steps
+      const dy = (last.relative_strength - first.relative_strength) / steps
+      if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) return null
+      return { dx, dy, length: Math.hypot(dx, dy), last }
+    }
+
+    const directionData = showTrails && trails
+      ? pts.flatMap((r) => {
+          const dir = direction(trails[r.code])
+          if (!dir) return []
+          const offset = Math.min(Math.max(maxAbs * 0.02, 0.0015), dir.length * 0.9)
+          const px = dir.last.absolute_strength + (dir.dx / dir.length) * offset
+          const py = dir.last.relative_strength + (dir.dy / dir.length) * offset
+          return [
+            {
+              name: r.name,
+              value: [px, py] as [number, number],
+              meta: r,
+              symbolRotate: (Math.atan2(dir.dx, dir.dy) * 180) / Math.PI,
+              symbolSize: selected === r.code ? 14 : 8,
+              itemStyle: {
+                color: quadrantColor(r.quadrant, isDark),
+                opacity: selected && selected !== r.code ? 0.38 : 0.95,
+              },
+            },
+          ]
+        })
+      : []
+
+    const directionSeries = directionData.length
+      ? [
+          {
+            type: 'scatter' as const,
+            name: 'Recent direction',
+            data: directionData,
+            symbol: 'arrow',
+            silent: true,
+            z: 6,
+            tooltip: { show: false },
+            label: { show: false },
+            emphasis: { disabled: true },
+          },
+        ]
+      : []
+
+    const selectedDirection = selectedTrail ? direction(selectedTrail) : null
+    const projectionSeries =
+      selected &&
+      selectedDirection &&
+      selectedTrail &&
+      selectedTrail.length >= 3 &&
+      reveal >= selectedTrail.length
+        ? (() => {
+            const row = rows.find((r) => r.code === selected)
+            const color = quadrantColor(row?.quadrant, isDark)
+            const steps = 3
+            const end: [number, number] = [
+              selectedDirection.last.absolute_strength + selectedDirection.dx * steps,
+              selectedDirection.last.relative_strength + selectedDirection.dy * steps,
+            ]
+            return [
+              {
+                type: 'line' as const,
+                name: 'Recent direction (extrapolation)',
+                data: [
+                  {
+                    value: [
+                      selectedDirection.last.absolute_strength,
+                      selectedDirection.last.relative_strength,
+                    ],
+                    symbol: 'none',
+                  },
+                  { value: end, symbol: 'arrow', symbolSize: 10 },
+                ],
+                showSymbol: true,
+                silent: true,
+                animation: false,
+                lineStyle: { width: 1.4, type: 'dashed' as const, color, opacity: 0.85 },
+                itemStyle: { color },
+                z: 4,
+                tooltip: { show: false },
+                emphasis: { disabled: true },
+              },
+            ]
+          })()
+        : []
 
     // Labels fan away from the crowded origin by quadrant so neighbouring
     // sectors in different quadrants do not stack on the same spot.
@@ -250,6 +385,8 @@ export function RotationQuadrant({
       },
       series: [
         ...trailSeries,
+        ...projectionSeries,
+        ...directionSeries,
         {
           type: 'scatter',
           name: 'Sectors',
@@ -353,7 +490,7 @@ export function RotationQuadrant({
         },
       ],
     } as unknown as EChartsOption
-  }, [rows, trails, isDark, selected, showTrails, compact])
+  }, [rows, trails, isDark, selected, showTrails, compact, bubbleMetric, watched, reveal, selectedTrail])
 
   const onEvents = useMemo(
     () => ({
@@ -368,7 +505,7 @@ export function RotationQuadrant({
 
   return (
     <div className="relative">
-      <Chart option={option} height={height} onEvents={onEvents} exportName={exportName} />
+      <Chart option={option} height={height} onEvents={onEvents} exportName={exportName} reserveTools />
       {!compact && (
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] text-muted">
           {QUADRANT_LABELS.map((q) => (
