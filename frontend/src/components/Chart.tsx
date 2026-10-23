@@ -103,10 +103,10 @@ export function Chart({
       dataZoom: [
         {
           type: 'inside',
-          zoomOnMouseWheel: true,
+          zoomOnMouseWheel: 'shift',
           moveOnMouseMove: true,
           moveOnMouseWheel: false,
-          preventDefaultMouseMove: true,
+          preventDefaultMouseMove: false,
         },
       ],
     } as EChartsOption

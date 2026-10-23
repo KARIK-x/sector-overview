@@ -24,7 +24,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation()
   return (
     <nav className="flex flex-col gap-6" aria-label="Primary">
-      {['Overview', 'Labs', 'Context', 'Trust'].map((group) => {
+      {['Overview', 'Labs', 'Context', 'Trust', 'Account'].map((group) => {
         const items = NAV.filter((n) => n.group === group)
         return (
           <div key={group}>
@@ -219,6 +219,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
       document.body.style.overflow = ''
     }
   }, [mobile])
+
+  // Wide tables scroll horizontally, but that must never hijack the page's
+  // vertical wheel scroll: a normal wheel over a table scrolls the page, and
+  // Shift+wheel scrolls the table horizontally.
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      const target = event.target as HTMLElement | null
+      const tableWrap = target?.closest('.table-wrap')
+      if (!tableWrap) return
+      // Shift+wheel is the explicit horizontal-scroll gesture for wide tables.
+      if (event.shiftKey) {
+        event.preventDefault()
+        tableWrap.scrollLeft += event.deltaY
+        return
+      }
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
+      event.preventDefault()
+      window.scrollBy(0, event.deltaY)
+    }
+    document.addEventListener('wheel', onWheel, { passive: false })
+    return () => document.removeEventListener('wheel', onWheel)
+  }, [])
 
   return (
     <div className="min-h-screen">

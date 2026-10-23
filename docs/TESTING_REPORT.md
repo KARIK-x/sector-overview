@@ -8,9 +8,16 @@ server), backed by the ingested SQLite warehouse (latest session 2026-10-16).
 
 Statuses use the project vocabulary: `TESTED-PASS`, `TESTED-FAIL`, `NOT-TESTED`, `BLOCKED`.
 
+> **Current checkout update (2026-10-23):** the private Account ledger adds 48 backend tests
+> (parser 18, fees 9, cash flow 10, holdings 6, API 16). The full suite is now **124 passed**;
+> Ruff, `tsc -p tsconfig.app.json --noEmit` and the Vite production build are clean. Account browser
+> evidence and methodology are in [ACCOUNT_LEDGER.md](ACCOUNT_LEDGER.md); screenshots are in
+> [`account-screenshots/`](account-screenshots/). The browser results below remain the historical
+> public-market run from 2026-10-22.
+
 ---
 
-## 1. Result summary
+## 1. Result summary (public-market session, 2026-10-22)
 
 | Layer | Checks | Result |
 | --- | --- | --- |

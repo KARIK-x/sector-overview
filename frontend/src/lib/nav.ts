@@ -9,6 +9,7 @@ import {
   GitCompareArrows,
   LayoutDashboard,
   LineChart,
+  Wallet,
   Newspaper,
   ShieldCheck,
   Sparkles,
@@ -130,8 +131,16 @@ export const NAV: NavItem[] = [
     description: 'Every formula, axis contract, denominator and limitation in one place.',
     group: 'Trust',
   },
+  {
+    to: '/account',
+    label: 'Private Ledger',
+    short: 'Account',
+    icon: Wallet,
+    description: 'Broker SMS imports, verified charges, cash flow, T+1 deadlines and WACC holdings.',
+    group: 'Account',
+  },
 ]
 
-export const GROUPS = ['Overview', 'Labs', 'Context', 'Trust']
+export const GROUPS = ['Overview', 'Labs', 'Context', 'Trust', 'Account']
 
 export const NAV_ICON_FALLBACK = Activity

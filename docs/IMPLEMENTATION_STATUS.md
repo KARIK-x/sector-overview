@@ -1,6 +1,6 @@
 # Implementation Status
 
-**As of:** 2026-10-22 · **Build:** production bundle served by FastAPI · **Latest session in data:** 2026-10-16
+**As of:** 2026-10-23 · **Build:** production bundle served by FastAPI · **Latest session in data:** 2026-10-16
 
 ## Status vocabulary
 
@@ -23,7 +23,7 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | --- | --- | --- |
 | Data ingestion (5 stages) | `TESTED-PASS` | 41,509 index rows, 433,817 summaries, 4,840 fundamental reports |
 | Calculations package | `TESTED-PASS` | 14 unit tests across returns, rotation boundaries, risk, breadth, concentration, MACD/correlation |
-| API contract | `TESTED-PASS` | 25 API tests; 19 read-only endpoints |
+| API contract | `TESTED-PASS` | 25 public API tests + 48 private account tests; 19 public read-only endpoints + authenticated `/api/account/*` |
 | Type-check / production build | `TESTED-PASS` | `tsc -b` clean; Vite build succeeded |
 | Dashboard | `TESTED-PASS` | Rendered + interactions + screenshot; 3 chart surfaces |
 | Sector Explorer | `TESTED-PASS` | Sector switching, ranges, exports, screenshot |
@@ -37,6 +37,7 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | Data Quality Center | `TESTED-PASS` | Re-check action, inventory/coverage, screenshot |
 | Events & Research | `BLOCKED` | Page renders and explains why no verified events feed exists |
 | Methodology | `TESTED-PASS` | 12 sections, formulas, screenshot |
+| Private Account Ledger | `TESTED-PASS` | Six tabs, SMS import, fee/CGT engine, cash flow, WACC holdings, key vault; 48 backend tests; 10 synthetic screenshots; **not deployed** |
 | Theme / command palette / mobile drawer / 404 | `TESTED-PASS` | Firefox + Chrome; screenshots for dark, mobile and 404 |
 | CSV / PNG exports | `TESTED-PASS` | Real downloads inspected: non-empty files, expected headers/PNG dimensions |
 | Cross-browser | `TESTED-PASS` (Chrome 36, Firefox 76) · `BLOCKED` (WebKit) | Playwright WebKit crashes with a host `Bus error`; Safari remains unverified |
@@ -53,6 +54,7 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | Route | Page | Status | Main evidence |
 | --- | --- | --- | --- |
 | `/` | Dashboard | `TESTED-PASS` | `artifacts/screenshots/01-dashboard.png` |
+| `/new` | New sector pulse | `TESTED-PASS` | prior session; live route on `sector-overview-web.vercel.app` |
 | `/rotation` | Rotation Lab | `TESTED-PASS` | `02-rotation-lab.png` |
 | `/compare` | Sector Comparison | `TESTED-PASS` | `03-sector-comparison.png` |
 | `/breadth` | Breadth Lab | `TESTED-PASS` | `04-breadth-lab.png` |
@@ -64,17 +66,20 @@ that was not performed. There are **no open `TESTED-FAIL` items** in this build.
 | `/data-quality` | Data Quality Center | `TESTED-PASS` | `10-data-quality.png` |
 | `/events` | Events & Research | `BLOCKED` | `11-events-research.png` |
 | `/methodology` | Methodology | `TESTED-PASS` | `12-methodology.png` |
+| `/account/*` | Private Account Ledger (six tabs) | `TESTED-PASS` | `docs/account-screenshots/` |
 | any unknown path | Not found | `TESTED-PASS` | `16-not-found.png` |
 
-Twelve content pages plus a 404 route. `Sector Comparison` is an addition beyond the eleven pages named
-in the original brief; it is the natural home for the multi-series line chart that the dashboard
-deliberately does not carry.
+Thirteen public content pages, the six private Account tabs and a 404 route. `Sector Comparison` is
+an addition beyond the eleven pages named in the original brief; it is the natural home for the
+multi-series line chart that the dashboard deliberately does not carry.
 
 ---
 
 ## 3. Backend surface
 
-**19 endpoints**, all `GET`, all read-only, cached in-process for 90 s.
+**19 public endpoints**, all `GET`, all read-only, cached in-process for 90 s. The private
+`/api/account/*` router adds authenticated reads and writes; it is `Cache-Control: private,
+no-store` and is documented separately in [ACCOUNT_LEDGER.md](ACCOUNT_LEDGER.md).
 
 | Endpoint | Status | Notes |
 | --- | --- | --- |
@@ -95,6 +100,7 @@ deliberately does not carry.
 | `/api/events` | `BLOCKED` | Returns `UNAVAILABLE` with reasons; no invented calendar |
 | `/api/data-quality` | `TESTED-PASS` | Inventory, coverage, classification, runs |
 | `/api/methodology` | `TESTED-PASS` | Structured formula content |
+| `/api/account/*` | `TESTED-PASS` | Private bearer-key ledger: vaults, imports, transactions, cash flow, holdings, fees, settlements, reversals, audit |
 
 ---
 
@@ -147,6 +153,8 @@ deliberately does not carry.
 * Free-host cold starts and ephemeral disks are deployment properties, not app defects.
 * ECharts canvases are not screen-reader accessible; text tables and summaries are the fallback.
 * Safari/WebKit has not been tested because Playwright's WebKit build crashes on this host.
+* Account tables are created with `create_all`; there is no Alembic history yet. The Account
+  feature is tested locally but has not been committed, pushed or deployed.
 
 See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) for the full list and
 [FUNCTIONALITY_AUDIT.md](FUNCTIONALITY_AUDIT.md) for the requirement-by-requirement trace.

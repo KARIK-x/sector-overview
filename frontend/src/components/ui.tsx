@@ -68,19 +68,21 @@ export function Metric({
   sub,
   tone,
   className,
+  valueClassName,
 }: {
   label: string
   value: ReactNode
   sub?: ReactNode
   tone?: 'pos' | 'neg' | 'warn' | 'neutral'
   className?: string
+  valueClassName?: string
 }) {
   const toneCls =
     tone === 'pos' ? 'pos' : tone === 'neg' ? 'neg' : tone === 'warn' ? 'warn' : 'text-ink'
   return (
     <div className={cn('min-w-0', className)}>
       <div className="eyebrow mb-1.5">{label}</div>
-      <div className={cn('num text-[22px] font-medium leading-none tracking-tight', toneCls)}>{value}</div>
+      <div className={cn('num text-[22px] font-medium leading-none tracking-tight', toneCls, valueClassName)}>{value}</div>
       {sub && <div className="mt-1.5 text-[11px] leading-snug text-muted">{sub}</div>}
     </div>
   )

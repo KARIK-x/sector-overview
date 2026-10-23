@@ -40,8 +40,15 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 def init_db() -> None:
     from . import models  # noqa: F401  (register metadata)
+    from .account import models as account_models  # noqa: F401  (register account metadata)
 
     Base.metadata.create_all(bind=engine)
+    # Fee/tax rules are versioned data, not code constants.  Insert any newly
+    # shipped revisions without overwriting rows an operator may have audited.
+    from .account.fees import ensure_default_fee_rules
+
+    with SessionLocal() as session:
+        ensure_default_fee_rules(session)
 
 
 def get_session() -> Iterator[Session]:

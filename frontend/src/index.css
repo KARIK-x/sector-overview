@@ -37,7 +37,7 @@
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body {
@@ -226,6 +226,7 @@ body::before {
 
   .table-wrap {
     @apply w-full overflow-x-auto;
+    overflow-y: clip;
   }
 
   .data-table {
@@ -247,6 +248,19 @@ body::before {
   }
   .data-table tbody tr:last-child td {
     border-bottom: 0;
+  }
+  .data-table.compact thead th,
+  .data-table.compact tbody td {
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
+  .data-table.compact thead th {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+  .data-table tbody td.wrap-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .skeleton {

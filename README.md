@@ -46,10 +46,13 @@ for a data refresh.
 | **Data Quality Center** | What is stored, how complete is it, and where did it come from? |
 | **Events & Research** | What would a corporate-events feed require, and why is it unavailable? |
 | **Methodology** | What is every formula, window and status label? |
+| **Account → Private Ledger** | What did I trade, what does it cost, what cash is committed, and what do I hold? |
 
-Thirteen content pages plus a 404 route. All charts are Apache ECharts; all numbers come from the
-FastAPI backend, never from hard-coded UI values. Charts share pan, zoom, period, reset, full-screen
-and PNG controls; CSV and PNG exports are client-side.
+Thirteen public content pages, the private six-tab Account section, and a 404 route. All charts are
+Apache ECharts; all market numbers come from the FastAPI backend, never from hard-coded UI values.
+Charts share pan, zoom, period, reset, full-screen and PNG controls; CSV and PNG exports are
+client-side. Account data is separate: it is user-owned, server-side, key-protected and never cached
+by the public CDN.
 
 ---
 
@@ -78,9 +81,11 @@ copied in.
 * **Two Vercel projects in production.** The Vite SPA is served by `sector-overview-web`; FastAPI is
   served by `sector-overview` and is reachable at `/api/*`. Locally and in the Docker image, one
   FastAPI process can still serve both.
-* **Read-only API.** Every endpoint is `GET`; ingestion is a separate CLI process.
-* **Deterministic calculations.** Maths lives in `backend/app/calculations/`, unit-tested independently
-  of HTTP and the database.
+* **Read-only public API.** Market endpoints are `GET`; ingestion is a separate CLI process. The
+  private Account endpoints under `/api/account/*` support authenticated writes, but are isolated
+  from the market cache and require a per-vault bearer key.
+* **Deterministic calculations.** Maths lives in `backend/app/calculations/` and
+  `backend/app/account/`, unit-tested independently of HTTP and the database.
 * **Honest serialisation.** Non-finite floats become `null`; the API cannot emit `NaN`/`Infinity`.
 * **Cheap to run.** Gzip and a short TTL cache keep payloads small; Neon stores the warehouse and
   GitHub Actions performs the daily batch. No Redis, worker or always-on server is required.
@@ -93,10 +98,12 @@ backend/app/
   calculations/   rotation, breadth, risk, liquidity, concentration, fundamentals, factors
   ingestion/      verified source URLs, HTTP cache, pipeline
   services/       analytics payload builders + short TTL cache
+  account/        private ledger: auth, parser, fees, WACC, cash flow, imports, routes
   models.py       sectors, index observations, securities, memberships, daily summaries, filings
-backend/tests/    64 tests (unit + API contract + serialiser)
+backend/tests/    124 tests (unit + API contract + serialiser + account ledger)
 frontend/src/
-  pages/          12 pages + 404
+  pages/          13 public pages + 6 account tabs + 404
+  pages/account/  vault gate, overview, transactions, cash flow, holdings, SMS import, settings
   components/     Chart, RotationQuadrant, SectorHeatmap, RankTimeline, Layout, UI primitives
   lib/            API client/types, formatters, chart theme, navigation, theme store, exports
 docs/             project, data, methodology, testing, status, visual/functional audits
@@ -152,6 +159,30 @@ described above; see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the exact to
 
 ---
 
+## Private Account Ledger
+
+The sidebar **Account** group is a separate, opt-in ledger for broker SMS. It parses BUY/SELL
+messages (including multi-stock bills and decimals), previews every row before import, and commits
+to a server-side vault protected by a one-time 256-bit key. The ledger calculates versioned Nepal
+brokerage, SEBON, DP and capital-gains charges, reconciles against the broker's `BAmt`, and models
+T+1 payment/EDIS obligations separately from T+2 CDSC settlement.
+
+It then answers the cash question: opening balances across multiple banks, actual deposits,
+withdrawals and transfers, partial payments/receipts, projected obligations, daily shortfalls, and
+a projected close that never pretends expected sale proceeds are already cash. Holdings use WACC
+with FIFO holding-period splits, realised/unrealised P&L and explicit manual-price overrides.
+
+* The full schema, formulas, fee sources, status vocabulary, security model, limitations and test
+  evidence are in **[ACCOUNT_LEDGER.md](docs/ACCOUNT_LEDGER.md)**.
+* Synthetic screenshots are in [`docs/account-screenshots/`](docs/account-screenshots/).
+* The vault key lives in `sessionStorage` for the current tab by default; only the explicit
+  “Remember this key on this device” option writes it to `localStorage`. Transactions, balances
+  and holdings are **never** stored in browser storage.
+
+This feature is implemented and locally tested, but is not yet committed, pushed or deployed.
+
+---
+
 ## Data
 
 | Dataset | Source | Status |
@@ -200,9 +231,9 @@ Worked example, 2026-10-16: Commercial Banks returned **+6.4629 %** over 20 sess
 ## Tests and checks
 
 ```bash
-cd backend  && .venv/bin/python -m pytest -p no:warnings   # 64 passed
+cd backend  && .venv/bin/python -m pytest -p no:warnings   # 124 passed
 cd backend  && .venv/bin/ruff check app tests              # clean
-cd frontend && npx tsc -b                                  # type-check
+cd frontend && npx tsc -p tsconfig.app.json --noEmit       # type-check
 cd frontend && npm run build                               # production build
 ```
 
@@ -212,9 +243,14 @@ Browser evidence (Playwright, production build):
 * **Chrome:** **36 checks**, all pass, zero console errors.
 * Real CSV/PNG downloads inspected: non-empty files, expected headers, PNG magic bytes and dimensions.
 * **WebKit/Safari:** `BLOCKED` — Playwright's WebKit build crashes on this host.
-* 16 final screenshots in [`artifacts/screenshots/`](artifacts/screenshots/), captured in Firefox with
-  pre-sized viewports (no stitched full-page captures); dimensions and method are in the
-  [screenshot index](artifacts/screenshots/README.md).
+* 16 final market screenshots in [`artifacts/screenshots/`](artifacts/screenshots/), captured in
+  Firefox with pre-sized viewports (no stitched full-page captures); dimensions and method are in
+  the [screenshot index](artifacts/screenshots/README.md).
+* Account browser validation used synthetic data only: locked gate, unlock/remember, vault
+  creation, one-time key, rotation (old key rejected, new key accepted), audited correction and
+  revert, partial settlement and reversal, cash movement and paired-transfer reversal, manual
+  price, bank-account create/deactivate, SMS preview, commit and duplicate skip. Ten screenshots are in
+  [`docs/account-screenshots/`](docs/account-screenshots/).
 
 Details and limitations: [TESTING_REPORT.md](docs/TESTING_REPORT.md). The committed harnesses live in
 [`scripts/verification/`](scripts/verification/).
@@ -226,6 +262,7 @@ Details and limitations: [TESTING_REPORT.md](docs/TESTING_REPORT.md). The commit
 * [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) — scope, priorities, decisions, milestones
 * [DATA_SOURCE_AUDIT.md](docs/DATA_SOURCE_AUDIT.md) — what each source provides, licensing, failures
 * [DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) — tables, fields, units, keys, API
+* [ACCOUNT_LEDGER.md](docs/ACCOUNT_LEDGER.md) — private ledger schema, fees, taxes, cash flow, security, limitations
 * [ANALYTICS_METHODOLOGY.md](docs/ANALYTICS_METHODOLOGY.md) — every formula and its caveats
 * [VISUALIZATION_CATALOG.md](docs/VISUALIZATION_CATALOG.md) — all 27 chart surfaces and encodings
 * [VISUALIZATION_AUDIT.md](docs/VISUALIZATION_AUDIT.md) — page-by-page visual review and fixes
@@ -252,6 +289,10 @@ No feature is labelled `TESTED-PASS` unless it was actually run. Events are `BLO
 verified feed exists; the page discloses that instead of fabricating a calendar. PostgreSQL, Docker,
 public deployment, WebKit/Safari, screen-reader testing and load testing are `NOT-TESTED` or `BLOCKED`,
 as recorded in the status and testing documents.
+
+The private Account ledger is `IMPLEMENTED` and `TESTED-PASS` locally against synthetic data. It is
+**not committed, pushed or deployed**; account deployment, migration history and production
+PostgreSQL validation remain pending.
 
 ---
 

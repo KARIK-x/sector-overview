@@ -17,6 +17,7 @@ const EventsResearch = lazy(() => import('./pages/EventsResearch'))
 const ResearchLab = lazy(() => import('./pages/ResearchLab'))
 const DataQuality = lazy(() => import('./pages/DataQuality'))
 const Methodology = lazy(() => import('./pages/Methodology'))
+const Account = lazy(() => import('./pages/Account'))
 
 function RouteFallback() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="/research" element={<ResearchLab />} />
           <Route path="/data-quality" element={<DataQuality />} />
           <Route path="/methodology" element={<Methodology />} />
+          <Route path="/account/*" element={<Account />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
