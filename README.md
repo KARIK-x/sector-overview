@@ -12,6 +12,23 @@ sector level — and shows its evidence for every number.
 
 ---
 
+## Live deployment
+
+| Component | Where |
+| --- | --- |
+| **App** | https://sector-overview-web.vercel.app |
+| **API health** | https://sector-overview.vercel.app/api/health |
+| **Frontend** | Vercel project `sector-overview-web` (Vite, root `frontend`) |
+| **Backend** | Vercel project `sector-overview` (FastAPI, root `backend`) |
+| **Database** | Neon PostgreSQL |
+| **Daily refresh** | GitHub Actions, `09:45 UTC` = **3:30 PM Nepal time** |
+
+The Vercel projects are connected to `KARIK-x/sector-overview` on `main`, so pushes deploy
+automatically. The daily ingestion workflow writes directly to Neon; no Vercel redeploy is needed
+for a data refresh.
+
+---
+
 ## What is here
 
 | Page | Question it answers |
@@ -40,25 +57,31 @@ FastAPI backend, never from hard-coded UI values. CSV and PNG exports are client
 Browser
    │  React 18 + TypeScript + Vite + Tailwind, React Query, ECharts
    ▼
-FastAPI
-   │  read-only JSON under /api/*, 90 s in-process cache, gzip
+Vercel CDN ── frontend project (`sector-overview-web`)
+   │  cross-origin calls to VITE_API_URL
    ▼
-SQLAlchemy 2 ── SQLite (default) or PostgreSQL (DATABASE_URL)
-   │
-   └─ calculations package: returns, rotation, breadth, concentration, risk, fundamentals, factors
+Vercel Function ── FastAPI backend (`sector-overview`)
+   │  read-only JSON under /api/*, gzip, short TTL cache
+   ▼
+SQLAlchemy 2 ── Neon PostgreSQL (DATABASE_URL)
+   ▲
+   │  daily batch
+GitHub Actions ── `scripts/ingest.py all` at 09:45 UTC
 ```
 
 The application is **fully independent**. It does not import, call or share infrastructure with any
 other trading application. No private files, databases, environment variables or analytics engines were
 copied in.
 
-* **One service in production.** FastAPI serves `/api/*` and the built SPA (including the catch-all route).
+* **Two Vercel projects in production.** The Vite SPA is served by `sector-overview-web`; FastAPI is
+  served by `sector-overview` and is reachable at `/api/*`. Locally and in the Docker image, one
+  FastAPI process can still serve both.
 * **Read-only API.** Every endpoint is `GET`; ingestion is a separate CLI process.
 * **Deterministic calculations.** Maths lives in `backend/app/calculations/`, unit-tested independently
   of HTTP and the database.
 * **Honest serialisation.** Non-finite floats become `null`; the API cannot emit `NaN`/`Infinity`.
-* **Cheap to run.** A 90 s in-process cache and gzip keep warm payloads small; no Redis, worker or
-  separate frontend host.
+* **Cheap to run.** Gzip and a short TTL cache keep payloads small; Neon stores the warehouse and
+  GitHub Actions performs the daily batch. No Redis, worker or always-on server is required.
 
 ### Layout
 
@@ -76,6 +99,8 @@ frontend/src/
   lib/            API client/types, formatters, chart theme, navigation, theme store, exports
 docs/             project, data, methodology, testing, status, visual/functional audits
 scripts/          ingestion CLI + Playwright verification harnesses
+.github/workflows/daily-ingest.yml  cloud refresh at 09:45 UTC
+frontend/vercel.json               SPA fallback for client-side routes
 artifacts/screenshots/  16 final evidence images
 Dockerfile        single-image build (frontend build + Python runtime)
 ```
@@ -119,7 +144,9 @@ cd frontend && npm run build     # writes frontend/dist
 cd ../backend && .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The backend serves the built SPA at `/` and the API at `/api/*`.
+The backend serves the built SPA at `/` and the API at `/api/*`. This single-service mode is used by
+the Docker image and local production runs. The public deployment uses the two Vercel projects
+described above; see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the exact topology.
 
 ---
 

@@ -1,22 +1,67 @@
 # Deployment Guide
 
-The application is a **single Python service** that serves both the JSON API and the built SPA.
-There is no separate frontend host, no queue, no cache server and no scheduled worker inside the
-request path. That shape is deliberate: it fits free tiers and keeps the moving parts countable.
+The application can run as a **single Python service** (local production, Docker) or as **two Vercel
+projects** backed by Neon PostgreSQL. The public deployment uses the split shape because Vercel
+Functions do not provide a persistent SQLite disk.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  FastAPI (uvicorn)                           │
-│   /api/*        read-only JSON, 90 s cache   │
-│   /assets/*     hashed static files          │
-│   /*            SPA fallback → index.html    │
+│  Vercel CDN — sector-overview-web (Vite)     │
+│   /            React SPA                     │
+│   /*           SPA fallback → index.html     │
+└───────────────┬──────────────────────────────┘
+                │ HTTPS + CORS (VITE_API_URL)
+┌───────────────▼──────────────────────────────┐
+│  Vercel Function — sector-overview (FastAPI) │
+│   /api/*       read-only JSON, gzip, cache   │
 └───────────────┬──────────────────────────────┘
                 │ SQLAlchemy
         ┌───────▼────────┐
-        │ SQLite file    │  default, needs a persistent disk
-        │ or PostgreSQL  │  recommended for free hosts with ephemeral disks
-        └────────────────┘
+        │ Neon Postgres  │  managed, persistent
+        └───────▲────────┘
+                │ daily batch at 09:45 UTC
+        ┌───────┴────────────┐
+        │ GitHub Actions     │  scripts/ingest.py all
+        └────────────────────┘
 ```
+
+### Current production endpoints
+
+| Component | URL / setting |
+| --- | --- |
+| App | https://sector-overview-web.vercel.app |
+| API | https://sector-overview.vercel.app/api |
+| Health | https://sector-overview.vercel.app/api/health |
+| Frontend project | `sector-overview-web`, root `frontend`, framework Vite |
+| Backend project | `sector-overview`, root `backend`, framework FastAPI |
+| Database | Neon project `noisy-dream-66534323`, `neondb` |
+| Daily refresh | `.github/workflows/daily-ingest.yml`, cron `45 9 * * *` |
+
+Vercel environment variables on `sector-overview`:
+
+| Key | Value |
+| --- | --- |
+| `DATABASE_URL` | `postgresql+psycopg://…@…neon.tech/neondb?sslmode=require&channel_binding=require` |
+| `DATA_DIR` | `/tmp` |
+| `CORS_ORIGINS` | `https://sector-overview-web.vercel.app,https://sector-overview.vercel.app,http://localhost:5173` |
+| `PYTHON_VERSION` | `3.12` |
+
+Vercel environment variable on `sector-overview-web`:
+
+| Key | Value |
+| --- | --- |
+| `VITE_API_URL` | `https://sector-overview.vercel.app` |
+
+The GitHub repository secret `DATABASE_URL` must contain the same Neon URL. The daily workflow
+writes directly to Neon; Vercel reads the new rows on the next request, so no redeploy is required.
+
+### Known trade-offs
+
+- **Cold start:** the first request after Vercel or Neon has been idle can take ~4 s. Warm API
+  responses are typically 0.2–0.7 s.
+- **Schedule drift:** GitHub Actions scheduled runs can start a few minutes late. The job is
+  idempotent, so a late or repeated run is safe.
+- **No persistent disk:** do not point `DATABASE_URL` at SQLite in this topology.
 
 ---
 
@@ -86,7 +131,41 @@ and can be replaced freely.
 Free tiers change. Verify the current limits on the provider's pricing page before committing. The
 constraints below are the ones that actually affect this app.
 
-### Option A — Render Free Web Service + Neon Free Postgres (recommended)
+### Option A — Vercel two-project + Neon Free Postgres (current production)
+
+| Constraint | Value | Consequence |
+| --- | --- | --- |
+| Vercel Hobby | Static CDN + serverless functions | First request after idle cold-starts (~4 s) |
+| Vercel Python | FastAPI supported; deploy from `backend/` | Function bundle must exclude `backend/data/` |
+| Neon free | ~0.5–1 GB storage per project, scale-to-zero after ~5 min idle | Enough for this dataset if history is pruned; first query wakes in seconds |
+| GitHub Actions | 2,000 free minutes/month | The daily ingest uses roughly 3 minutes/day |
+| All | No credit card required for the free tiers | $0 to run |
+
+**Why it fits:** the SPA is static and served from Vercel's CDN; the API is read-only and small. The
+daily batch runs outside the request path on GitHub Actions, so no always-on worker is needed.
+
+**Current setup**
+
+* App: https://sector-overview-web.vercel.app
+* API: https://sector-overview.vercel.app/api
+* Frontend project: `sector-overview-web`, root `frontend`, framework Vite
+* Backend project: `sector-overview`, root `backend`, framework FastAPI
+* Backend env: `DATABASE_URL`, `DATA_DIR=/tmp`, `CORS_ORIGINS`, `PYTHON_VERSION=3.12`
+* Frontend env: `VITE_API_URL=https://sector-overview.vercel.app`
+* Daily refresh: `.github/workflows/daily-ingest.yml` at `09:45 UTC`
+
+**Steps to recreate**
+
+1. Create a Neon project and copy the SQLAlchemy URL
+   (`postgresql+psycopg://…?sslmode=require&channel_binding=require`).
+2. Import the repository into Vercel twice. Set the first project's root to `frontend` (Vite) and
+   the second's root to `backend` (FastAPI).
+3. Add the backend and frontend environment variables listed above.
+4. Add `DATABASE_URL` as a GitHub repository secret and enable
+   `.github/workflows/daily-ingest.yml`.
+5. Run the workflow once manually, then verify `/api/health` and `/api/dashboard`.
+
+### Option B — Render Free Web Service + Neon Free Postgres (alternative)
 
 | Constraint | Value | Consequence |
 | --- | --- | --- |
@@ -124,7 +203,7 @@ That fits the 0.5–1 GB free tier, but the daily-summary table is the bulk. If 
 prune `daily_summaries` to the last 5 years (breadth will still work) or keep SQLite on a host with
 a disk.
 
-### Option B — Hugging Face Docker Space
+### Option C — Hugging Face Docker Space
 
 | Constraint | Value | Consequence |
 | --- | --- | --- |
@@ -139,7 +218,7 @@ image, then serve read-only. Rebuild the Space to refresh data. Alternatively po
 The Space needs a `README.md` with the `sdk: docker` / `app_port: 8000` front-matter at the
 repository root it deploys from; do not overwrite this project's README.
 
-### Option C — Oracle Cloud Always Free VM
+### Option D — Oracle Cloud Always Free VM
 
 | Constraint | Value | Consequence |
 | --- | --- | --- |
@@ -150,16 +229,17 @@ repository root it deploys from; do not overwrite this project's README.
 This is the best option if cold starts are unacceptable. Run the Docker image with a named volume,
 put Caddy or nginx in front for TLS, and schedule `scripts/ingest.py` with cron.
 
-### Option D — Any VPS or home server
+### Option E — Any VPS or home server
 
 Identical to Option C without the free-tier capacity games. A 1 GB RAM instance is sufficient:
 the API is single-process and the working set is a few hundred MB with pandas loaded.
 
 ### What does **not** work alone
 
-* **Vercel / Netlify / Cloudflare Pages / GitHub Pages:** static-only. They can host the SPA but not
-  the FastAPI + pandas backend. Splitting the two is possible (static host + API elsewhere) but adds
-  CORS and a second deploy for no benefit here.
+* **Netlify / Cloudflare Pages / GitHub Pages:** static-only. They can host the SPA but not the
+  FastAPI + pandas backend. Splitting the two is possible (static host + API elsewhere) but adds CORS
+  and a second deploy. Vercel is the exception used here: it supports both a static frontend and a
+  Python/FastAPI function.
 * **Cloudflare Workers (Python):** the runtime is not a general CPython with pandas/scipy and a
   writable SQLite file.
 * **Render's free PostgreSQL:** 30-day expiry makes it unsuitable for a long-lived demo.
@@ -168,7 +248,7 @@ the API is single-process and the working set is a few hundred MB with pandas lo
 
 | Component | Free option | Monthly cost |
 | --- | --- | --- |
-| Web service | Render free / HF Space / Oracle VM | $0 |
+| Web service | Vercel Hobby / Render free / HF Space / Oracle VM | $0 |
 | Database | Neon free / SQLite on a volume | $0 |
 | Ingest schedule | GitHub Actions on a public repo | $0 |
 | TLS + domain | Provider subdomain | $0 |
@@ -266,7 +346,7 @@ provider-level rate limiter. All payloads are cached for 90 s, which bounds data
 
 ---
 
-## 4. Daily refresh automation
+## 9. Daily refresh automation
 
 The warehouse is refreshed by running the same idempotent ingestion command:
 
@@ -277,10 +357,11 @@ python scripts/ingest.py all
 ### Hosted daily refresh
 
 Add `DATABASE_URL` as a repository secret, then enable `.github/workflows/daily-ingest.yml`.
-The workflow runs at 18:00 UTC and can also be started manually from the Actions tab.
+The workflow runs at **09:45 UTC (3:30 PM Nepal time)** and can also be started manually from the
+Actions tab. GitHub Actions may start scheduled runs a few minutes late.
 
-This is the recommended production pattern: the web service stays read-only, and the scheduled
-job writes to the same PostgreSQL database.
+This is the current production pattern: Vercel stays read-only, and the scheduled job writes to the
+same Neon PostgreSQL database.
 
 ### Local daily refresh
 
